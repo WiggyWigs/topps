@@ -533,8 +533,17 @@ function render() {
 }
 
 // Wire up controls
-['searchBox','categoryFilter','yearFilter'].forEach(id => {
+['searchBox','categoryFilter'].forEach(id => {
   document.getElementById(id).addEventListener(id === 'searchBox' ? 'input' : 'change', render);
+});
+
+document.getElementById('yearFilter').addEventListener('change', function() {
+  const currentYear = new Date().getFullYear();
+  const selected = parseInt(this.value);
+  if (selected && selected < currentYear) {
+    document.getElementById('filterPresale').checked = false;
+  }
+  render();
 });
 
 // Checkboxes — checking one unchecks the other
