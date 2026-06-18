@@ -1,0 +1,33 @@
+name: Daily WaxStat Update
+
+on:
+  schedule:
+    # Runs every day at 8:00 AM Eastern (12:00 UTC)
+    # Adjust if you want a different time
+    - cron: '0 12 * * *'
+
+  # Allows you to run this manually from the Actions tab in GitHub
+  workflow_dispatch:
+
+jobs:
+  update-sheet:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install gspread google-auth requests beautifulsoup4
+
+      - name: Run WaxStat updater
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+        run: |
+          python waxstat_update.py
