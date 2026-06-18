@@ -117,8 +117,38 @@
     border-color: var(--accent);
   }
 
-  .controls input { flex: 1 1 180px; }
+  .controls input[type="text"] { flex: 1 1 180px; }
   .controls select { flex: 0 0 auto; min-width: 160px; }
+
+  .checkbox-group {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+    background: none;
+  }
+
+  .checkbox-label:hover { color: var(--text); }
 
   /* ── Table ──────────────────────────────────────── */
   #main {
@@ -209,10 +239,14 @@
 <div id="topbar">
   <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <span id="topbar-title">📦 Topps Tracker</span>
-    <div class="cards" style="flex:1 1 auto" id="cards">
+    <div class="cards" style="flex:1 1 auto;grid-template-columns:repeat(5,1fr)" id="cards">
       <div class="card">
         <div class="card-label">Total Products</div>
         <div class="card-value accent" id="cTotal">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Last Updated</div>
+        <div class="card-value" id="cLastUpdated" style="font-size:14px">—</div>
       </div>
       <div class="card">
         <div class="card-label">Average ROI</div>
@@ -232,6 +266,14 @@
     <input type="text" id="searchBox" placeholder="Search products…">
     <select id="categoryFilter"><option value="">All Categories</option></select>
     <select id="yearFilter"><option value="">All Collection Years</option></select>
+    <div class="checkbox-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="filterPresale"> Pre-sale only
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="filterReleased"> Released only
+      </label>
+    </div>
   </div>
 </div>
 
@@ -278,7 +320,6 @@ const COLS = [
   ["Current Est. Sale Price",    COL.SALE_PRICE,    true ],
   ["Gain",                       COL.GAIN,          true ],
   ["ROI %",                      COL.ROI,           true ],
-  ["Last Updated",               COL.LAST_UPDATED,  false],
   ["eBay Profit",                COL.EBAY_PROFIT,   true ],
 ];
 
@@ -320,6 +361,15 @@ async function loadData() {
     const rows = text.trim().split('\n').map(r => r.split('\t'));
     // slice(1) to skip header row
     allData = rows.slice(1).filter(isVisible);
+
+    // Last Updated card — most recent timestamp across ALL rows
+    let latestStr = '';
+    allData.forEach(r => {
+      const v = (r[COL.LAST_UPDATED] || '').trim();
+      if (v && (!latestStr || v > latestStr)) latestStr = v;
+    });
+    document.getElementById('cLastUpdated').textContent = latestStr || '—';
+
     buildFilters();
     render();
   } catch (e) {
@@ -337,13 +387,22 @@ function buildFilters() {
 }
 
 function getFiltered() {
-  const search = document.getElementById('searchBox').value.toLowerCase();
-  const cat    = document.getElementById('categoryFilter').value;
-  const yr     = document.getElementById('yearFilter').value;
+  const search    = document.getElementById('searchBox').value.toLowerCase();
+  const cat       = document.getElementById('categoryFilter').value;
+  const yr        = document.getElementById('yearFilter').value;
+  const presale   = document.getElementById('filterPresale').checked;
+  const released  = document.getElementById('filterReleased').checked;
+  const today     = new Date(); today.setHours(0, 0, 0, 0);
+
   return allData.filter(row => {
     if (cat && row[COL.CATEGORY]      !== cat) return false;
     if (yr  && row[COL.COLLECTION_YR] !== yr)  return false;
     if (search && !row.join(' ').toLowerCase().includes(search)) return false;
+    if (presale || released) {
+      const releaseDate = parseDate(row[COL.RELEASE_DATE]);
+      if (presale  && releaseDate <= today) return false;
+      if (released && releaseDate >  today) return false;
+    }
     return true;
   });
 }
@@ -470,6 +529,16 @@ function render() {
 // Wire up controls
 ['searchBox','categoryFilter','yearFilter'].forEach(id => {
   document.getElementById(id).addEventListener(id === 'searchBox' ? 'input' : 'change', render);
+});
+
+// Checkboxes — checking one unchecks the other
+document.getElementById('filterPresale').addEventListener('change', function() {
+  if (this.checked) document.getElementById('filterReleased').checked = false;
+  render();
+});
+document.getElementById('filterReleased').addEventListener('change', function() {
+  if (this.checked) document.getElementById('filterPresale').checked = false;
+  render();
 });
 
 loadData();
