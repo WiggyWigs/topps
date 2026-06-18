@@ -368,7 +368,12 @@ async function loadData() {
       const v = (r[COL.LAST_UPDATED] || '').trim();
       if (v && (!latestStr || v > latestStr)) latestStr = v;
     });
-    document.getElementById('cLastUpdated').textContent = latestStr ? latestStr.slice(0, 10) : '—';
+    if (latestStr) {
+      const [y, m, d] = latestStr.slice(0, 10).split('-');
+      document.getElementById('cLastUpdated').textContent = `${m}/${d}/${y.slice(2)}`;
+    } else {
+      document.getElementById('cLastUpdated').textContent = '—';
+    }
 
     buildFilters();
     render();
