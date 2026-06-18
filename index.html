@@ -187,6 +187,14 @@
     display: none;
   }
 
+  .presale {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 400;
+    margin-left: 5px;
+    letter-spacing: .3px;
+  }
+
   /* status bar */
   #statusBar {
     color: var(--muted);
@@ -430,6 +438,17 @@ function render() {
         a.rel = 'noopener';
         a.textContent = row[COL.PRODUCT] || '';
         td.appendChild(a);
+      } else if (colIdx === COL.SALE_PRICE) {
+        td.textContent = row[colIdx] || '';
+        const releaseDate = parseDate(row[COL.RELEASE_DATE]);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (releaseDate > today) {
+          const tag = document.createElement('span');
+          tag.className = 'presale';
+          tag.textContent = '(pre-sale)';
+          td.appendChild(tag);
+        }
       } else {
         td.textContent = row[colIdx] || '';
       }
@@ -455,5 +474,10 @@ function render() {
 
 loadData();
 </script>
+
+<footer style="padding: 16px 20px 28px; color: var(--muted); font-size: 12px;">
+  *eBay profit includes a 16% fee taken out of the estimated sale price
+</footer>
+
 </body>
 </html>
