@@ -257,7 +257,7 @@
         <div class="card-value green" id="cBestEbay" title="">—</div>
       </div>
       <div class="card">
-        <div class="card-label">Newest Release</div>
+        <div class="card-label">Highest ROI</div>
         <div class="card-value" id="cNewest" title="">—</div>
       </div>
     </div>
@@ -368,7 +368,7 @@ async function loadData() {
       const v = (r[COL.LAST_UPDATED] || '').trim();
       if (v && (!latestStr || v > latestStr)) latestStr = v;
     });
-    document.getElementById('cLastUpdated').textContent = latestStr || '—';
+    document.getElementById('cLastUpdated').textContent = latestStr ? latestStr.slice(0, 10) : '—';
 
     buildFilters();
     render();
@@ -414,6 +414,7 @@ function updateCards(data) {
     ['cAvgROI','cBestEbay','cNewest'].forEach(id => {
       document.getElementById(id).textContent = '—';
       document.getElementById(id).removeAttribute('title');
+      document.getElementById(id).className = 'card-value';
     });
     return;
   }
@@ -434,15 +435,15 @@ function updateCards(data) {
   ebayEl.textContent = bestEbayName || '—';
   ebayEl.title = bestEbayName;
 
-  // Newest Release
-  let newestDate = new Date(0), newestName = '';
+  // Highest ROI
+  let bestROI = -Infinity, bestROIName = '';
   data.forEach(r => {
-    const d = parseDate(r[COL.RELEASE_DATE]);
-    if (d > newestDate) { newestDate = d; newestName = r[COL.PRODUCT]; }
+    const v = parseNum(r[COL.ROI]);
+    if (v > bestROI) { bestROI = v; bestROIName = r[COL.PRODUCT]; }
   });
   const newEl = document.getElementById('cNewest');
-  newEl.textContent = newestName || '—';
-  newEl.title = newestName;
+  newEl.textContent = bestROIName ? `${bestROIName} (${bestROI.toFixed(1)}%)` : '—';
+  newEl.title = bestROIName;
 }
 
 function render() {
