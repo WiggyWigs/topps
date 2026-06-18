@@ -1,489 +1,459 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Topps Tracker</title>
-
 <style>
-body {
-    background: #111827;
-    color: #e5e7eb;
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 20px;
-}
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-h1 {
-    margin-top: 0;
-}
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --surface2: #21262d;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --accent:   #388bfd;
+    --green:    #3fb950;
+    --green-lt: #7ee787;
+    --yellow:   #d29922;
+    --red:      #f85149;
+    --radius:   8px;
+    --header-h: 56px;
+  }
 
-.controls {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-}
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
 
-input, select {
-    background: #1f2937;
-    color: white;
-    border: 1px solid #374151;
-    padding: 10px;
-    border-radius: 6px;
-}
-
-.cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
-    gap: 15px;
-    margin-bottom: 25px;
-}
-
-.card {
-    background: #1f2937;
-    padding: 15px;
-    border-radius: 8px;
-}
-
-.card-label {
-    color: #9ca3af;
-    font-size: 12px;
-    margin-bottom: 5px;
-}
-
-.card-value {
-    font-size: 22px;
-    font-weight: bold;
-}
-
-.table-container {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: #1f2937;
-}
-
-thead th {
+  /* ── Sticky top bar ─────────────────────────────── */
+  #topbar {
     position: sticky;
     top: 0;
-    background: #111827;
-    cursor: pointer;
-    padding: 12px;
-    text-align: left;
-    border-bottom: 2px solid #374151;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  #topbar-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    color: var(--text);
+  }
+
+  /* ── Dashboard cards ────────────────────────────── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  @media (max-width: 900px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .cards { grid-template-columns: 1fr 1fr; }
+  }
+
+  .card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+  }
+
+  .card-label {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-bottom: 4px;
+  }
+
+  .card-value {
+    font-size: 18px;
+    font-weight: 700;
     white-space: nowrap;
-}
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
 
-tbody td {
-    padding: 10px;
-    border-bottom: 1px solid #374151;
-}
+  .card-value.accent { color: var(--accent); }
+  .card-value.green  { color: var(--green); }
 
-tbody tr:hover {
-    background: #273449;
-}
+  /* ── Controls ───────────────────────────────────── */
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 
-a {
-    color: #60a5fa;
-    text-decoration: none;
-}
+  .controls input,
+  .controls select {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 7px 11px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
 
-.roi-high {
-    color: #22c55e;
-    font-weight: bold;
-}
+  .controls input:focus,
+  .controls select:focus {
+    border-color: var(--accent);
+  }
 
-.roi-medium {
-    color: #86efac;
-}
+  .controls input { flex: 1 1 180px; }
+  .controls select { flex: 0 0 auto; min-width: 160px; }
 
-.roi-low {
-    color: #facc15;
-}
+  /* ── Table ──────────────────────────────────────── */
+  #main {
+    padding: 16px 20px 40px;
+  }
 
-.roi-negative {
-    color: #ef4444;
-}
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
 
-.sort-indicator {
-    margin-left: 4px;
-}
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
 
-@media (max-width: 768px) {
-    body {
-        padding: 10px;
-    }
-}
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    transition: color .15s;
+  }
+
+  thead th:hover { color: var(--text); }
+
+  thead th.sort-asc::after  { content: " ▲"; color: var(--accent); }
+  thead th.sort-desc::after { content: " ▼"; color: var(--accent); }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+
+  tbody td {
+    padding: 9px 12px;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ROI colors */
+  .roi-high     { color: var(--green);    font-weight: 700; }
+  .roi-medium   { color: var(--green-lt); }
+  .roi-low      { color: var(--yellow);   }
+  .roi-negative { color: var(--red);      }
+
+  /* empty state */
+  #emptyMsg {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px;
+    display: none;
+  }
+
+  /* status bar */
+  #statusBar {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
 </style>
-
 </head>
-
 <body>
 
-<h1>Topps Tracker</h1>
-
-<div class="controls">
-    <input type="text" id="searchBox" placeholder="Search products...">
-
-```
-<select id="categoryFilter">
-    <option value="">All Categories</option>
-</select>
-
-<select id="yearFilter">
-    <option value="">All Collection Years</option>
-</select>
-```
-
-</div>
-
-<div class="cards">
-    <div class="card">
+<!-- ── Sticky topbar ───────────────────────────────── -->
+<div id="topbar">
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <span id="topbar-title">📦 Topps Tracker</span>
+    <div class="cards" style="flex:1 1 auto" id="cards">
+      <div class="card">
         <div class="card-label">Total Products</div>
-        <div class="card-value" id="totalProducts">-</div>
+        <div class="card-value accent" id="cTotal">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Average ROI</div>
+        <div class="card-value" id="cAvgROI">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Highest eBay Profit</div>
+        <div class="card-value green" id="cBestEbay" title="">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Newest Release</div>
+        <div class="card-value" id="cNewest" title="">—</div>
+      </div>
     </div>
-
-```
-<div class="card">
-    <div class="card-label">Average ROI</div>
-    <div class="card-value" id="avgROI">-</div>
+  </div>
+  <div class="controls">
+    <input type="text" id="searchBox" placeholder="Search products…">
+    <select id="categoryFilter"><option value="">All Categories</option></select>
+    <select id="yearFilter"><option value="">All Collection Years</option></select>
+  </div>
 </div>
 
-<div class="card">
-    <div class="card-label">Best ROI Product</div>
-    <div class="card-value" id="bestROI">-</div>
-</div>
-
-<div class="card">
-    <div class="card-label">Newest Release</div>
-    <div class="card-value" id="newestRelease">-</div>
-</div>
-```
-
-</div>
-
-<div class="table-container">
-<table id="trackerTable">
-<thead></thead>
-<tbody></tbody>
-</table>
+<!-- ── Main content ────────────────────────────────── -->
+<div id="main">
+  <div id="statusBar"></div>
+  <div class="table-wrap">
+    <table id="trackerTable">
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="emptyMsg">No matching products found.</div>
+  </div>
 </div>
 
 <script>
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTz21vfo11n-iPWC5m3zD_kOOb1LvFN6hgvv4mzSQwgaw8ml3l3v708MWioXLkOmMZZ4Y3KVfdUrR87/pub?output=tsv";
 
-const CSV_URL =
-"https://docs.google.com/spreadsheets/d/e/2PACX-1vTz21vfo11n-iPWC5m3zD_kOOb1LvFN6hgvv4mzSQwgaw8ml3l3v708MWioXLkOmMZZ4Y3KVfdUrR87/pub?output=tsv";
+// Column indices in the TSV
+const COL = {
+  RELEASE_DATE:  0,
+  COLLECTION_YR: 1,
+  CATEGORY:      2,
+  PRODUCT:       3,
+  BOX_TYPE:      4,
+  MSRP:          5,
+  WAXSTAT:       6,
+  SALE_PRICE:    7,
+  GAIN:          8,
+  ROI:           9,
+  URL:           10,
+  LAST_UPDATED:  11,
+  EBAY_PROFIT:   12,
+};
 
-let tableData = [];
-let currentSortColumn = 0;
-let sortAscending = false;
-
-const visibleColumns = [
-    0, // Release Date
-    1, // Collection Year
-    2, // Category
-    3, // Product
-    4, // Box Type
-    5, // MSRP
-    7, // Current Estimated Sale Price
-    8, // Gain
-    9, // ROI
-    11, // Last Updated
-    12 // Ebay Profit
+// Display: [header label, tsv column index, numeric?]
+const COLS = [
+  ["Release Date",               COL.RELEASE_DATE,  false],
+  ["Collection Year",            COL.COLLECTION_YR, false],
+  ["Category",                   COL.CATEGORY,      false],
+  ["Product",                    COL.PRODUCT,       false],
+  ["Box Type",                   COL.BOX_TYPE,      false],
+  ["MSRP",                       COL.MSRP,          true ],
+  ["Current Est. Sale Price",    COL.SALE_PRICE,    true ],
+  ["Gain",                       COL.GAIN,          true ],
+  ["ROI %",                      COL.ROI,           true ],
+  ["Last Updated",               COL.LAST_UPDATED,  false],
+  ["eBay Profit",                COL.EBAY_PROFIT,   true ],
 ];
 
-const displayHeaders = [
-    "Release Date",
-    "Collection Year",
-    "Category",
-    "Product",
-    "Box Type",
-    "MSRP",
-    "Current Estimated Sale Price",
-    "Gain",
-    "ROI %",
-    "Last Updated",
-    "eBay Profit"
-];
+let allData = [];
+let sortCol = 0;     // index into COLS
+let sortAsc = false; // default: Release Date descending
 
-function parseNumber(value) {
-    return parseFloat(
-        value.replace(/[$,%]/g, '')
-             .replace(/,/g, '')
-             .trim()
-    ) || 0;
+function parseNum(v) {
+  if (v == null) return 0;
+  return parseFloat(String(v).replace(/[$,%\s]/g, '').replace(/,/g, '')) || 0;
 }
 
-function parseDate(value) {
-    const parts = value.trim().split('/');
-    if(parts.length !== 3) return new Date(0);
-
-    let year = parseInt(parts[2]);
-
-    if(year < 100) {
-        year += 2000;
-    }
-
-    return new Date(year, parts[0]-1, parts[1]);
+function parseDate(v) {
+  if (!v) return new Date(0);
+  const p = String(v).trim().split('/');
+  if (p.length !== 3) return new Date(0);
+  let y = parseInt(p[2]);
+  if (y < 100) y += 2000;
+  return new Date(y, parseInt(p[0]) - 1, parseInt(p[1]));
 }
 
-function getROIClass(roi) {
+function roiClass(raw) {
+  const v = parseNum(raw);
+  if (v > 100) return 'roi-high';
+  if (v >= 50)  return 'roi-medium';
+  if (v >= 0)   return 'roi-low';
+  return 'roi-negative';
+}
 
-    const value = parseNumber(roi);
-
-    if(value > 100) return 'roi-high';
-    if(value >= 50) return 'roi-medium';
-    if(value >= 0) return 'roi-low';
-
-    return 'roi-negative';
+// A row is visible only if MSRP and Sale Price both exist
+function isVisible(row) {
+  return parseNum(row[COL.MSRP]) !== 0 && parseNum(row[COL.SALE_PRICE]) !== 0;
 }
 
 async function loadData() {
-
-    const response = await fetch(CSV_URL);
-    const text = await response.text();
-
-    const rows = text
-        .trim()
-        .split('\n')
-        .map(r => r.split('\t'));
-
-    tableData = rows.slice(1);
-
+  try {
+    const res = await fetch(CSV_URL);
+    const text = await res.text();
+    const rows = text.trim().split('\n').map(r => r.split('\t'));
+    // slice(1) to skip header row
+    allData = rows.slice(1).filter(isVisible);
     buildFilters();
-    updateCards();
-    renderTable();
+    render();
+  } catch (e) {
+    document.getElementById('statusBar').textContent = 'Failed to load data. Check network or spreadsheet permissions.';
+  }
 }
 
 function buildFilters() {
-
-    const categorySet = new Set();
-    const yearSet = new Set();
-
-    tableData.forEach(row => {
-        categorySet.add(row[2]);
-        yearSet.add(row[1]);
-    });
-
-    [...categorySet].sort().forEach(c => {
-        categoryFilter.innerHTML +=
-        `<option value="${c}">${c}</option>`;
-    });
-
-    [...yearSet].sort().forEach(y => {
-        yearFilter.innerHTML +=
-        `<option value="${y}">${y}</option>`;
-    });
+  const cats = [...new Set(allData.map(r => r[COL.CATEGORY]))].filter(Boolean).sort();
+  const yrs  = [...new Set(allData.map(r => r[COL.COLLECTION_YR]))].filter(Boolean).sort();
+  const catSel = document.getElementById('categoryFilter');
+  const yrSel  = document.getElementById('yearFilter');
+  cats.forEach(c => { const o = document.createElement('option'); o.value = o.textContent = c; catSel.appendChild(o); });
+  yrs.forEach(y  => { const o = document.createElement('option'); o.value = o.textContent = y; yrSel.appendChild(o); });
 }
 
-function updateCards() {
-
-    document.getElementById("totalProducts").textContent =
-        tableData.length;
-
-    let totalROI = 0;
-    let bestROI = -999999;
-    let bestProduct = "";
-    let newestDate = new Date(0);
-    let newestProduct = "";
-
-    tableData.forEach(row => {
-
-        const roi = parseNumber(row[9]);
-
-        totalROI += roi;
-
-        if(roi > bestROI) {
-            bestROI = roi;
-            bestProduct = row[3];
-        }
-
-        const date = parseDate(row[0]);
-
-        if(date > newestDate) {
-            newestDate = date;
-            newestProduct = row[3];
-        }
-    });
-
-    document.getElementById("avgROI").textContent =
-        (totalROI / tableData.length).toFixed(1) + "%";
-
-    document.getElementById("bestROI").textContent =
-        bestProduct;
-
-    document.getElementById("newestRelease").textContent =
-        newestProduct;
+function getFiltered() {
+  const search = document.getElementById('searchBox').value.toLowerCase();
+  const cat    = document.getElementById('categoryFilter').value;
+  const yr     = document.getElementById('yearFilter').value;
+  return allData.filter(row => {
+    if (cat && row[COL.CATEGORY]      !== cat) return false;
+    if (yr  && row[COL.COLLECTION_YR] !== yr)  return false;
+    if (search && !row.join(' ').toLowerCase().includes(search)) return false;
+    return true;
+  });
 }
 
-function getFilteredData() {
+function updateCards(data) {
+  document.getElementById('cTotal').textContent = data.length;
 
-    const search =
-        document.getElementById("searchBox")
-        .value
-        .toLowerCase();
-
-    const category =
-        document.getElementById("categoryFilter").value;
-
-    const year =
-        document.getElementById("yearFilter").value;
-
-    return tableData.filter(row => {
-
-        const matchesSearch =
-            row.join(' ')
-            .toLowerCase()
-            .includes(search);
-
-        const matchesCategory =
-            !category || row[2] === category;
-
-        const matchesYear =
-            !year || row[1] === year;
-
-        return matchesSearch &&
-               matchesCategory &&
-               matchesYear;
+  if (data.length === 0) {
+    ['cAvgROI','cBestEbay','cNewest'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+      document.getElementById(id).removeAttribute('title');
     });
+    return;
+  }
+
+  // Average ROI
+  const avgROI = data.reduce((s, r) => s + parseNum(r[COL.ROI]), 0) / data.length;
+  const roiEl = document.getElementById('cAvgROI');
+  roiEl.textContent = avgROI.toFixed(1) + '%';
+  roiEl.className = 'card-value ' + roiClass(avgROI);
+
+  // Highest eBay Profit
+  let bestEbay = -Infinity, bestEbayName = '';
+  data.forEach(r => {
+    const v = parseNum(r[COL.EBAY_PROFIT]);
+    if (v > bestEbay) { bestEbay = v; bestEbayName = r[COL.PRODUCT]; }
+  });
+  const ebayEl = document.getElementById('cBestEbay');
+  ebayEl.textContent = bestEbayName || '—';
+  ebayEl.title = bestEbayName;
+
+  // Newest Release
+  let newestDate = new Date(0), newestName = '';
+  data.forEach(r => {
+    const d = parseDate(r[COL.RELEASE_DATE]);
+    if (d > newestDate) { newestDate = d; newestName = r[COL.PRODUCT]; }
+  });
+  const newEl = document.getElementById('cNewest');
+  newEl.textContent = newestName || '—';
+  newEl.title = newestName;
 }
 
-function renderTable() {
+function render() {
+  const data = getFiltered();
 
-    const data = getFilteredData();
+  // Sort
+  data.sort((a, b) => {
+    const [,colIdx, isNum] = COLS[sortCol];
+    let av = a[colIdx];
+    let bv = b[colIdx];
+    if (colIdx === COL.RELEASE_DATE || colIdx === COL.LAST_UPDATED) {
+      av = parseDate(av); bv = parseDate(bv);
+    } else if (isNum) {
+      av = parseNum(av); bv = parseNum(bv);
+    } else {
+      av = String(av || '').toLowerCase();
+      bv = String(bv || '').toLowerCase();
+    }
+    if (av < bv) return sortAsc ? -1 :  1;
+    if (av > bv) return sortAsc ?  1 : -1;
+    return 0;
+  });
 
-    data.sort((a,b) => {
-
-        const col =
-            visibleColumns[currentSortColumn];
-
-        let av = a[col];
-        let bv = b[col];
-
-        if(col === 0) {
-
-            av = parseDate(av);
-            bv = parseDate(bv);
-
-        } else if (
-            [5,7,8,9,12].includes(col)
-        ) {
-
-            av = parseNumber(av);
-            bv = parseNumber(bv);
-        }
-
-        if(av < bv)
-            return sortAscending ? -1 : 1;
-
-        if(av > bv)
-            return sortAscending ? 1 : -1;
-
-        return 0;
+  // Build header (only once, or rebuild to update sort indicators)
+  const thead = document.getElementById('thead');
+  thead.innerHTML = '';
+  const tr = document.createElement('tr');
+  COLS.forEach(([label], i) => {
+    const th = document.createElement('th');
+    th.textContent = label;
+    if (i === sortCol) th.className = sortAsc ? 'sort-asc' : 'sort-desc';
+    th.addEventListener('click', () => {
+      if (sortCol === i) sortAsc = !sortAsc;
+      else { sortCol = i; sortAsc = true; }
+      render();
     });
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);
 
-    const thead =
-        document.querySelector("#trackerTable thead");
-
-    const tbody =
-        document.querySelector("#trackerTable tbody");
-
-    thead.innerHTML = "";
-    tbody.innerHTML = "";
-
-    const headerRow =
-        document.createElement("tr");
-
-    displayHeaders.forEach((header,index) => {
-
-        const th =
-            document.createElement("th");
-
-        const arrow =
-            index === currentSortColumn
-            ? (sortAscending ? " ▲" : " ▼")
-            : "";
-
-        th.innerHTML =
-            header +
-            `<span class="sort-indicator">${arrow}</span>`;
-
-        th.onclick = () => {
-
-            if(currentSortColumn === index) {
-                sortAscending = !sortAscending;
-            } else {
-                currentSortColumn = index;
-                sortAscending = true;
-            }
-
-            renderTable();
-        };
-
-        headerRow.appendChild(th);
+  // Build body
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  data.forEach(row => {
+    const tr = document.createElement('tr');
+    COLS.forEach(([, colIdx]) => {
+      const td = document.createElement('td');
+      if (colIdx === COL.PRODUCT) {
+        const a = document.createElement('a');
+        a.href = row[COL.URL] || '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = row[COL.PRODUCT] || '';
+        td.appendChild(a);
+      } else {
+        td.textContent = row[colIdx] || '';
+      }
+      if (colIdx === COL.ROI) td.className = roiClass(row[COL.ROI]);
+      tr.appendChild(td);
     });
+    tbody.appendChild(tr);
+  });
 
-    thead.appendChild(headerRow);
+  const emptyMsg = document.getElementById('emptyMsg');
+  emptyMsg.style.display = data.length === 0 ? 'block' : 'none';
 
-    data.forEach(row => {
+  document.getElementById('statusBar').textContent =
+    `Showing ${data.length} of ${allData.length} products`;
 
-        const tr =
-            document.createElement("tr");
-
-        visibleColumns.forEach(col => {
-
-            const td =
-                document.createElement("td");
-
-            if(col === 3) {
-
-                const link =
-                    document.createElement("a");
-
-                link.href = row[10];
-                link.target = "_blank";
-                link.textContent = row[3];
-
-                td.appendChild(link);
-
-            } else {
-
-                td.textContent = row[col];
-            }
-
-            if(col === 9) {
-                td.className =
-                    getROIClass(row[9]);
-            }
-
-            tr.appendChild(td);
-        });
-
-        tbody.appendChild(tr);
-    });
+  updateCards(data);
 }
 
-document
-.getElementById("searchBox")
-.addEventListener("input", renderTable);
-
-document
-.getElementById("categoryFilter")
-.addEventListener("change", renderTable);
-
-document
-.getElementById("yearFilter")
-.addEventListener("change", renderTable);
+// Wire up controls
+['searchBox','categoryFilter','yearFilter'].forEach(id => {
+  document.getElementById(id).addEventListener(id === 'searchBox' ? 'input' : 'change', render);
+});
 
 loadData();
-
 </script>
-
 </body>
 </html>
