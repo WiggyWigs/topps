@@ -11,7 +11,8 @@ import json
 # CONFIG
 # ======================================
 
-SHEET_NAME = "topps-tracker"
+SHEET_NAME       = "topps-tracker"
+HISTORY_SHEET    = "price_history"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -28,7 +29,6 @@ HEADERS = {
 
 # True = skip rows already updated today
 # False = refresh everything
-
 SKIP_UPDATED_TODAY = True
 
 # ======================================
@@ -47,7 +47,6 @@ if creds_env:
     )
     print("Loaded credentials from environment variable")
 else:
-    # Local fallback — uses the original JSON file
     CREDS_FILE = "topps-tracker-499814-874632f78fe4.json"
     creds = Credentials.from_service_account_file(
         CREDS_FILE,
@@ -55,17 +54,56 @@ else:
     )
     print("Loaded credentials from local file")
 
-client = gspread.authorize(creds)
-
-sheet = client.open(SHEET_NAME).sheet1
-
-rows = sheet.get_all_values()
+client  = gspread.authorize(creds)
+wb      = client.open(SHEET_NAME)
+sheet   = wb.sheet1
+rows    = sheet.get_all_values()
 
 print(f"Found {len(rows)-1} rows")
 
 # ======================================
+# PRICE HISTORY SETUP
+# ======================================
+
+today     = datetime.now()
+today_str = today.strftime("%Y-%m-%d")
+is_snapshot_day = today.day in (1, 15)
+
+# Get or create the price_history worksheet
+try:
+    history_sheet = wb.worksheet(HISTORY_SHEET)
+    print(f"Found existing '{HISTORY_SHEET}' sheet")
+except gspread.exceptions.WorksheetNotFound:
+    history_sheet = wb.add_worksheet(
+        title=HISTORY_SHEET,
+        rows=5000,
+        cols=4
+    )
+    # Write header row
+    history_sheet.append_row(
+        ["Date", "Product", "Box Type", "WaxStat Avg"],
+        value_input_option="RAW"
+    )
+    print(f"Created new '{HISTORY_SHEET}' sheet")
+
+# Build a set of (date, product, box_type) already logged
+# so we never double-write on the same snapshot day
+if is_snapshot_day:
+    existing_history = history_sheet.get_all_values()
+    logged_keys = set()
+    for h_row in existing_history[1:]:   # skip header
+        if len(h_row) >= 3:
+            logged_keys.add((h_row[0], h_row[1], h_row[2]))
+    print(f"Snapshot day — {len(logged_keys)} existing history records loaded")
+else:
+    logged_keys = set()
+    print("Not a snapshot day — skipping price history")
+
+# ======================================
 # PROCESS EACH ROW
 # ======================================
+
+snapshot_rows = []   # batch all history writes, append once at the end
 
 for row_num in range(2, len(rows) + 1):
 
@@ -73,10 +111,10 @@ for row_num in range(2, len(rows) + 1):
 
         row = rows[row_num - 1]
 
-        # Column K = URL
+        # Column K = URL (index 10)
         url = row[10].strip() if len(row) > 10 else ""
 
-        # Column L = Last Updated
+        # Column L = Last Updated (index 11)
         last_updated_cell = row[11].strip() if len(row) > 11 else ""
 
         if not url:
@@ -84,17 +122,9 @@ for row_num in range(2, len(rows) + 1):
             continue
 
         # Skip rows already updated today
-
         if SKIP_UPDATED_TODAY and last_updated_cell:
-
-            today = datetime.now().strftime("%Y-%m-%d")
-
-            if last_updated_cell.startswith(today):
-
-                print(
-                    f"Row {row_num}: Already updated today"
-                )
-
+            if last_updated_cell.startswith(today_str):
+                print(f"Row {row_num}: Already updated today")
                 continue
 
         print(f"Processing row {row_num}")
@@ -139,56 +169,65 @@ for row_num in range(2, len(rows) + 1):
                     break
 
         if avg_price is None:
-
-            print(
-                f"Row {row_num}: Average market price not found"
-            )
-
+            print(f"Row {row_num}: Average market price not found")
             continue
 
-        ninety_value = round(
-            avg_price * 0.90,
-            2
-        )
+        ninety_value = round(avg_price * 0.90, 2)
 
-        last_updated = datetime.now().strftime(
-            "%Y-%m-%d %H:%M"
-        )
+        last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         # ======================================
-        # UPDATE SHEET
+        # UPDATE MAIN SHEET
         # ======================================
 
-        # G = WaxStat Avg
-        # H = 90% Value
-
+        # G = WaxStat Avg, H = 90% Value
         sheet.update(
             f"G{row_num}:H{row_num}",
-            [[
-                avg_price,
-                ninety_value
-            ]]
+            [[avg_price, ninety_value]]
         )
 
         # L = Last Updated
-
         sheet.update(
             f"L{row_num}",
             [[last_updated]]
         )
 
-        print(
-            f"Updated row {row_num} | Avg=${avg_price:.2f}"
-        )
+        print(f"Updated row {row_num} | Avg=${avg_price:.2f}")
+
+        # ======================================
+        # QUEUE PRICE HISTORY SNAPSHOT
+        # ======================================
+
+        if is_snapshot_day:
+
+            product  = row[3].strip() if len(row) > 3 else ""
+            box_type = row[4].strip() if len(row) > 4 else ""
+            key      = (today_str, product, box_type)
+
+            if key not in logged_keys:
+                snapshot_rows.append(
+                    [today_str, product, box_type, avg_price]
+                )
+                logged_keys.add(key)
+                print(f"  Queued history snapshot for: {product} {box_type}")
+            else:
+                print(f"  History already logged today for: {product} {box_type}")
 
         # Avoid hammering WaxStat
-
         time.sleep(1)
 
     except Exception as e:
+        print(f"Row {row_num} failed: {e}")
 
-        print(
-            f"Row {row_num} failed: {e}"
-        )
+# ======================================
+# WRITE HISTORY BATCH
+# ======================================
+
+if snapshot_rows:
+    history_sheet.append_rows(
+        snapshot_rows,
+        value_input_option="RAW"
+    )
+    print(f"\nWrote {len(snapshot_rows)} snapshot rows to '{HISTORY_SHEET}'")
 
 print("Done.")
