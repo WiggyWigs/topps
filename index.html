@@ -349,19 +349,21 @@ function roiClass(raw) {
   return 'roi-negative';
 }
 
-// A row is visible if it has MSRP + Sale Price, OR if it's a future release (pre-sale)
+// Show any row that has a product name — blank data cells are fine
 function isVisible(row) {
-  const hasPrices = parseNum(row[COL.MSRP]) !== 0 && parseNum(row[COL.SALE_PRICE]) !== 0;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const isFuture = parseDate(row[COL.RELEASE_DATE]) > today;
-  return hasPrices || isFuture;
+  return (row[COL.PRODUCT] || '').trim() !== '';
 }
 
 async function loadData() {
   try {
     const res = await fetch(CSV_URL);
     const text = await res.text();
-    const rows = text.trim().split('\n').map(r => r.split('\t'));
+    const rows = text.trim().split('\n').map(r => {
+      const cols = r.split('\t');
+      // Pad to at least 13 columns so blank trailing cells don't break index lookups
+      while (cols.length < 13) cols.push('');
+      return cols;
+    });
     // slice(1) to skip header row
     allData = rows.slice(1).filter(isVisible);
 
