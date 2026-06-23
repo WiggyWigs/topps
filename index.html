@@ -217,6 +217,17 @@
     display: none;
   }
 
+  .ebay-links { display: flex; gap: 8px; }
+  .ebay-links a {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .ebay-links a:hover { background: var(--accent); color: #000; text-decoration: none; }
+
   .presale {
     color: var(--muted);
     font-size: 11px;
@@ -310,6 +321,7 @@ const COL = {
 };
 
 // Display: [header label, tsv column index, numeric?]
+// null index = computed column (not from TSV)
 const COLS = [
   ["Release Date",               COL.RELEASE_DATE,  false],
   ["Collection Year",            COL.COLLECTION_YR, false],
@@ -321,6 +333,7 @@ const COLS = [
   ["Gain",                       COL.GAIN,          true ],
   ["ROI %",                      COL.ROI,           true ],
   ["eBay Profit",                COL.EBAY_PROFIT,   true ],
+  ["eBay Links",                 null,              false],
 ];
 
 let allData = [];
@@ -462,6 +475,7 @@ function render() {
   // Sort
   data.sort((a, b) => {
     const [,colIdx, isNum] = COLS[sortCol];
+    if (colIdx === null) return 0; // computed columns not sortable
     let av = a[colIdx];
     let bv = b[colIdx];
     if (colIdx === COL.RELEASE_DATE || colIdx === COL.LAST_UPDATED) {
@@ -501,7 +515,27 @@ function render() {
     const tr = document.createElement('tr');
     COLS.forEach(([, colIdx]) => {
       const td = document.createElement('td');
-      if (colIdx === COL.PRODUCT) {
+      if (colIdx === null) {
+        // Computed eBay links column
+        const keyword = [row[COL.PRODUCT], row[COL.BOX_TYPE]]
+          .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
+        if (keyword) {
+          const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}&_sacat=0&_from=R40`;
+          const listingsUrl = `${base}&_trksid=m570.l1313`;
+          const soldUrl     = `${base}&rt=nc&LH_Sold=1`;
+          const wrap = document.createElement('div');
+          wrap.className = 'ebay-links';
+          [['Listings', listingsUrl], ['Sold', soldUrl]].forEach(([label, href]) => {
+            const a = document.createElement('a');
+            a.href = href;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.textContent = label;
+            wrap.appendChild(a);
+          });
+          td.appendChild(wrap);
+        }
+      } else if (colIdx === COL.PRODUCT) {
         const a = document.createElement('a');
         a.href = row[COL.URL] || '#';
         a.target = '_blank';
