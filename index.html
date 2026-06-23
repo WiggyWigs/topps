@@ -236,6 +236,26 @@
     letter-spacing: .3px;
   }
 
+  .ebay-links {
+    display: flex;
+    gap: 10px;
+  }
+
+  .ebay-links a {
+    font-size: 12px;
+    padding: 2px 8px;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .ebay-links a:hover {
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+  }
+
   /* status bar */
   #statusBar {
     color: var(--muted);
@@ -442,15 +462,25 @@ function updateCards(data) {
     return;
   }
 
-  // Average ROI
-  const avgROI = data.reduce((s, r) => s + parseNum(r[COL.ROI]), 0) / data.length;
-  const roiEl = document.getElementById('cAvgROI');
-  roiEl.textContent = avgROI.toFixed(1) + '%';
-  roiEl.className = 'card-value ' + roiClass(avgROI);
+  // Only include rows with both MSRP and Sale Price in ROI calculations
+  const pricedRows = data.filter(r =>
+    parseNum(r[COL.MSRP]) !== 0 && parseNum(r[COL.SALE_PRICE]) !== 0
+  );
 
-  // Highest eBay Profit
+  // Average ROI — priced rows only
+  const roiEl = document.getElementById('cAvgROI');
+  if (pricedRows.length === 0) {
+    roiEl.textContent = '—';
+    roiEl.className = 'card-value';
+  } else {
+    const avgROI = pricedRows.reduce((s, r) => s + parseNum(r[COL.ROI]), 0) / pricedRows.length;
+    roiEl.textContent = avgROI.toFixed(1) + '%';
+    roiEl.className = 'card-value ' + roiClass(avgROI);
+  }
+
+  // Highest eBay Profit — priced rows only
   let bestEbay = -Infinity, bestEbayName = '';
-  data.forEach(r => {
+  pricedRows.forEach(r => {
     const v = parseNum(r[COL.EBAY_PROFIT]);
     if (v > bestEbay) { bestEbay = v; bestEbayName = r[COL.PRODUCT]; }
   });
@@ -458,9 +488,9 @@ function updateCards(data) {
   ebayEl.textContent = bestEbayName || '—';
   ebayEl.title = bestEbayName;
 
-  // Highest ROI
+  // Highest ROI — priced rows only
   let bestROI = -Infinity, bestROIName = '';
-  data.forEach(r => {
+  pricedRows.forEach(r => {
     const v = parseNum(r[COL.ROI]);
     if (v > bestROI) { bestROI = v; bestROIName = r[COL.PRODUCT]; }
   });
@@ -556,7 +586,14 @@ function render() {
       } else {
         td.textContent = row[colIdx] || '';
       }
-      if (colIdx === COL.ROI) td.className = roiClass(row[COL.ROI]);
+      if (colIdx === COL.ROI) {
+        const hasPrices = parseNum(row[COL.MSRP]) !== 0 && parseNum(row[COL.SALE_PRICE]) !== 0;
+        if (hasPrices) {
+          td.className = roiClass(row[COL.ROI]);
+        } else {
+          td.textContent = '';
+        }
+      }
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
