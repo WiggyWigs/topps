@@ -519,13 +519,21 @@ function render() {
 
     let av = a[colIdx];
     let bv = b[colIdx];
+
+    // Push blank values to the bottom regardless of sort direction
+    const aBlank = av == null || String(av).trim() === '';
+    const bBlank = bv == null || String(bv).trim() === '';
+    if (aBlank && bBlank) return 0;
+    if (aBlank) return 1;
+    if (bBlank) return -1;
+
     if (colIdx === COL.RELEASE_DATE || colIdx === COL.LAST_UPDATED) {
       av = parseDate(av); bv = parseDate(bv);
     } else if (isNum) {
       av = parseNum(av); bv = parseNum(bv);
     } else {
-      av = String(av || '').toLowerCase();
-      bv = String(bv || '').toLowerCase();
+      av = String(av).toLowerCase();
+      bv = String(bv).toLowerCase();
     }
     if (av < bv) return sortAsc ? -1 :  1;
     if (av > bv) return sortAsc ?  1 : -1;
