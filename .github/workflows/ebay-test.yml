@@ -1,7 +1,7 @@
 name: eBay Playwright Test
 
 on:
-  workflow_dispatch:  # manual trigger only
+  workflow_dispatch:
 
 jobs:
   test-ebay-scrape:
@@ -19,25 +19,49 @@ jobs:
       - name: Install dependencies
         run: |
           pip install playwright beautifulsoup4
-          playwright install chromium
+          playwright install chromium --with-deps
 
       - name: Run eBay test
         run: |
-          python - << 'EOF'
+          python - << 'EOF2'
           from playwright.sync_api import sync_playwright
 
           url = "https://www.ebay.com/sch/i.html?_nkw=2024+Topps+Chrome+Hobby+-break+-PYT+-live+-case&_sacat=0&LH_Sold=1&LH_Complete=1"
 
           with sync_playwright() as p:
-              browser = p.chromium.launch(headless=True)
-              page = browser.new_page()
-              page.goto(url, wait_until="domcontentloaded", timeout=30000)
-              page.wait_for_timeout(3000)
+              browser = p.chromium.launch(
+                  headless=True,
+                  args=[
+                      '--no-sandbox',
+                      '--disable-blink-features=AutomationControlled',
+                      '--disable-infobars',
+                  ]
+              )
+              context = browser.new_context(
+                  user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                  viewport={"width": 1280, "height": 800},
+                  locale="en-US",
+                  timezone_id="America/New_York",
+              )
+              # Mask webdriver property
+              context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+              page = context.new_page()
+              page.goto(url, wait_until="networkidle", timeout=60000)
+              page.wait_for_timeout(5000)
+
+              # Print raw HTML snippet to see what eBay is returning
+              html = page.content()
+              print(f"Page length: {len(html)} chars")
 
               prices = page.query_selector_all("span.s-item__price")
               print(f"Found {len(prices)} prices")
-              for price in prices[:5]:
+              for price in prices[:10]:
                   print(price.inner_text())
 
+              # Also try alternate selectors
+              alt = page.query_selector_all(".s-item__detail .s-item__price")
+              print(f"Alt selector found: {len(alt)}")
+
               browser.close()
-          EOF
+          EOF2
