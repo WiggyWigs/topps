@@ -569,7 +569,8 @@ function render() {
         const keyword = [row[COL.PRODUCT], row[COL.BOX_TYPE]]
           .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
         if (keyword) {
-          const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}&_sacat=0&_from=R40`;
+          const exclusions = '-break+-PYT+-live+-case';
+          const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}+${exclusions}&_sacat=0&_from=R40`;
           const listingsUrl = `${base}&_trksid=m570.l1313`;
           const soldUrl     = `${base}&rt=nc&LH_Sold=1`;
           const wrap = document.createElement('div');
