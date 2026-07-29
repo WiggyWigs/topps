@@ -1,0 +1,43 @@
+name: eBay Playwright Test
+
+on:
+  workflow_dispatch:  # manual trigger only
+
+jobs:
+  test-ebay-scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright beautifulsoup4
+          playwright install chromium
+
+      - name: Run eBay test
+        run: |
+          python - << 'EOF'
+          from playwright.sync_api import sync_playwright
+
+          url = "https://www.ebay.com/sch/i.html?_nkw=2024+Topps+Chrome+Hobby+-break+-PYT+-live+-case&_sacat=0&LH_Sold=1&LH_Complete=1"
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              page.goto(url, wait_until="domcontentloaded", timeout=30000)
+              page.wait_for_timeout(3000)
+
+              prices = page.query_selector_all("span.s-item__price")
+              print(f"Found {len(prices)} prices")
+              for price in prices[:5]:
+                  print(price.inner_text())
+
+              browser.close()
+          EOF
