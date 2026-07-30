@@ -6,13 +6,14 @@ from datetime import datetime
 import time
 import os
 import json
+import re
 
 # ======================================
 # CONFIG
 # ======================================
 
-SHEET_NAME       = "topps-tracker"
-HISTORY_SHEET    = "price_history"
+SHEET_NAME    = "topps-tracker"
+HISTORY_SHEET = "price_history"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -27,39 +28,51 @@ HEADERS = {
 # UPDATE SETTINGS
 # ======================================
 
-# True = skip rows already updated today
+# True  = skip rows already updated today
 # False = refresh everything
 SKIP_UPDATED_TODAY = True
+
+# ======================================
+# COLUMN INDICES (0-based)
+# ======================================
+
+COL_RELEASE_DATE  = 0
+COL_YEAR          = 1
+COL_CATEGORY      = 2
+COL_PRODUCT       = 3
+COL_BOX_TYPE      = 4
+COL_MSRP          = 5
+COL_WAXSTAT_AVG   = 6   # G
+COL_NINETY_VALUE  = 7   # H
+COL_GAIN          = 8
+COL_ROI           = 9
+COL_WAXSTAT_URL   = 10  # K
+COL_LAST_UPDATED  = 11  # L
+COL_EBAY_PROFIT   = 12  # M
+COL_TRACKER_URL   = 13  # N
+COL_EBAY_PRICE    = 14  # O
 
 # ======================================
 # CONNECT TO GOOGLE SHEET
 # ======================================
 
-# Load credentials from environment variable (GitHub Actions secret)
-# Falls back to local file for running locally
 creds_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
 
 if creds_env:
     creds_dict = json.loads(creds_env)
-    creds = Credentials.from_service_account_info(
-        creds_dict,
-        scopes=SCOPES
-    )
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     print("Loaded credentials from environment variable")
 else:
     CREDS_FILE = "topps-tracker-499814-874632f78fe4.json"
-    creds = Credentials.from_service_account_file(
-        CREDS_FILE,
-        scopes=SCOPES
-    )
+    creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
     print("Loaded credentials from local file")
 
-client  = gspread.authorize(creds)
-wb      = client.open(SHEET_NAME)
-sheet   = wb.sheet1
-rows    = sheet.get_all_values()
+client = gspread.authorize(creds)
+wb     = client.open(SHEET_NAME)
+sheet  = wb.sheet1
+rows   = sheet.get_all_values()
 
-print(f"Found {len(rows)-1} rows")
+print(f"Found {len(rows)-1} data rows")
 
 # ======================================
 # PRICE HISTORY SETUP
@@ -69,29 +82,21 @@ today     = datetime.now()
 today_str = today.strftime("%Y-%m-%d")
 is_snapshot_day = today.day in (1, 15)
 
-# Get or create the price_history worksheet
 try:
     history_sheet = wb.worksheet(HISTORY_SHEET)
     print(f"Found existing '{HISTORY_SHEET}' sheet")
 except gspread.exceptions.WorksheetNotFound:
-    history_sheet = wb.add_worksheet(
-        title=HISTORY_SHEET,
-        rows=5000,
-        cols=4
-    )
-    # Write header row
+    history_sheet = wb.add_worksheet(title=HISTORY_SHEET, rows=5000, cols=4)
     history_sheet.append_row(
         ["Date", "Product", "Box Type", "WaxStat Avg"],
         value_input_option="RAW"
     )
     print(f"Created new '{HISTORY_SHEET}' sheet")
 
-# Build a set of (date, product, box_type) already logged
-# so we never double-write on the same snapshot day
 if is_snapshot_day:
     existing_history = history_sheet.get_all_values()
     logged_keys = set()
-    for h_row in existing_history[1:]:   # skip header
+    for h_row in existing_history[1:]:
         if len(h_row) >= 3:
             logged_keys.add((h_row[0], h_row[1], h_row[2]))
     print(f"Snapshot day — {len(logged_keys)} existing history records loaded")
@@ -100,121 +105,153 @@ else:
     print("Not a snapshot day — skipping price history")
 
 # ======================================
+# HELPER: SCRAPE SPORTSCARDSPRO PRICE
+# ======================================
+
+def get_sportscards_price(tracker_url):
+    """
+    Scrapes the Ungraded market price from a SportsCardsPro product page.
+    Returns a float price or None if not found.
+    """
+    try:
+        response = requests.get(tracker_url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # The market price lives in the first <td> of the price table
+        # that contains a dollar amount. It looks like: "$485.00"
+        # We look for a <td> whose text matches a price pattern
+        price_pattern = re.compile(r'^\$[\d,]+\.\d{2}')
+
+        # First, try the id="sell-prices" table which holds the grade prices
+        tables = soup.find_all("table")
+        for table in tables:
+            cells = table.find_all("td")
+            for cell in cells:
+                text = cell.get_text(strip=True)
+                # Match a clean price cell like "$485.00" or "$485.00+$10.00"
+                if price_pattern.match(text):
+                    # Strip any trailing delta like "+$10.00" or "-$5.00"
+                    price_str = text.split('+')[0].split('-')[0]
+                    price_str = price_str.replace('$', '').replace(',', '').strip()
+                    price = float(price_str)
+                    if price > 0:
+                        return price
+
+        print(f"  No price found in tables")
+        return None
+
+    except Exception as e:
+        print(f"  SportsCardsPro scrape error: {e}")
+        return None
+
+# ======================================
 # PROCESS EACH ROW
 # ======================================
 
-snapshot_rows = []   # batch all history writes, append once at the end
+snapshot_rows = []
 
 for row_num in range(2, len(rows) + 1):
 
     try:
-
         row = rows[row_num - 1]
 
-        # Column K = URL (index 10)
-        url = row[10].strip() if len(row) > 10 else ""
+        # Pad short rows
+        while len(row) < 15:
+            row.append("")
 
-        # Column L = Last Updated (index 11)
-        last_updated_cell = row[11].strip() if len(row) > 11 else ""
+        waxstat_url  = row[COL_WAXSTAT_URL].strip()
+        tracker_url  = row[COL_TRACKER_URL].strip()
+        last_updated = row[COL_LAST_UPDATED].strip()
+        product      = row[COL_PRODUCT].strip()
+        box_type     = row[COL_BOX_TYPE].strip()
 
-        if not url:
-            print(f"Row {row_num}: No URL")
+        if not product:
             continue
 
         # Skip rows already updated today
-        if SKIP_UPDATED_TODAY and last_updated_cell:
-            if last_updated_cell.startswith(today_str):
-                print(f"Row {row_num}: Already updated today")
+        if SKIP_UPDATED_TODAY and last_updated:
+            if last_updated.startswith(today_str):
+                print(f"Row {row_num}: Already updated today — skipping")
                 continue
 
-        print(f"Processing row {row_num}")
+        updated_something = False
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            timeout=30
-        )
+        # ======================================
+        # WAXSTAT SCRAPE
+        # ======================================
 
-        response.raise_for_status()
+        if waxstat_url:
+            print(f"Row {row_num}: Scraping WaxStat — {product}")
+            try:
+                response = requests.get(waxstat_url, headers=HEADERS, timeout=30)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, "html.parser")
 
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
-        )
+                avg_price = None
+                labels = soup.find_all("div", class_="text-grey")
+                for label in labels:
+                    if "Average market price" in label.get_text():
+                        price_div = label.find_next("div", class_="price")
+                        if price_div:
+                            avg_price = float(
+                                price_div.get_text()
+                                .replace("$", "")
+                                .replace(",", "")
+                            )
+                            break
 
-        avg_price = None
-
-        labels = soup.find_all(
-            "div",
-            class_="text-grey"
-        )
-
-        for label in labels:
-
-            if "Average market price" in label.get_text():
-
-                price_div = label.find_next(
-                    "div",
-                    class_="price"
-                )
-
-                if price_div:
-
-                    avg_price = float(
-                        price_div.get_text()
-                        .replace("$", "")
-                        .replace(",", "")
+                if avg_price is not None:
+                    ninety_value = round(avg_price * 0.90, 2)
+                    sheet.update(
+                        f"G{row_num}:H{row_num}",
+                        [[avg_price, ninety_value]]
                     )
+                    print(f"  WaxStat updated | Avg=${avg_price:.2f}")
+                    updated_something = True
 
-                    break
+                    # Queue history snapshot
+                    if is_snapshot_day:
+                        key = (today_str, product, box_type)
+                        if key not in logged_keys:
+                            snapshot_rows.append([today_str, product, box_type, avg_price])
+                            logged_keys.add(key)
+                            print(f"  Queued history snapshot")
+                else:
+                    print(f"  WaxStat: price not found")
 
-        if avg_price is None:
-            print(f"Row {row_num}: Average market price not found")
-            continue
+            except Exception as e:
+                print(f"  WaxStat error: {e}")
 
-        ninety_value = round(avg_price * 0.90, 2)
-
-        last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-        # ======================================
-        # UPDATE MAIN SHEET
-        # ======================================
-
-        # G = WaxStat Avg, H = 90% Value
-        sheet.update(
-            f"G{row_num}:H{row_num}",
-            [[avg_price, ninety_value]]
-        )
-
-        # L = Last Updated
-        sheet.update(
-            f"L{row_num}",
-            [[last_updated]]
-        )
-
-        print(f"Updated row {row_num} | Avg=${avg_price:.2f}")
+            time.sleep(1)
 
         # ======================================
-        # QUEUE PRICE HISTORY SNAPSHOT
+        # SPORTSCARDSPRO SCRAPE
         # ======================================
 
-        if is_snapshot_day:
+        if tracker_url:
+            print(f"Row {row_num}: Scraping SportsCardsPro — {product}")
+            ebay_price = get_sportscards_price(tracker_url)
 
-            product  = row[3].strip() if len(row) > 3 else ""
-            box_type = row[4].strip() if len(row) > 4 else ""
-            key      = (today_str, product, box_type)
-
-            if key not in logged_keys:
-                snapshot_rows.append(
-                    [today_str, product, box_type, avg_price]
+            if ebay_price is not None:
+                sheet.update(
+                    f"O{row_num}",
+                    [[ebay_price]]
                 )
-                logged_keys.add(key)
-                print(f"  Queued history snapshot for: {product} {box_type}")
+                print(f"  SportsCardsPro updated | Price=${ebay_price:.2f}")
+                updated_something = True
             else:
-                print(f"  History already logged today for: {product} {box_type}")
+                print(f"  SportsCardsPro: price not found")
 
-        # Avoid hammering WaxStat
-        time.sleep(1)
+            time.sleep(1)
+
+        # ======================================
+        # UPDATE LAST UPDATED TIMESTAMP
+        # ======================================
+
+        if updated_something:
+            sheet.update(f"L{row_num}", [[now_str]])
 
     except Exception as e:
         print(f"Row {row_num} failed: {e}")
@@ -224,10 +261,7 @@ for row_num in range(2, len(rows) + 1):
 # ======================================
 
 if snapshot_rows:
-    history_sheet.append_rows(
-        snapshot_rows,
-        value_input_option="RAW"
-    )
+    history_sheet.append_rows(snapshot_rows, value_input_option="RAW")
     print(f"\nWrote {len(snapshot_rows)} snapshot rows to '{HISTORY_SHEET}'")
 
 print("Done.")
