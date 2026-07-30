@@ -114,27 +114,24 @@ def get_sportscards_price(tracker_url):
     Returns a float price or None if not found.
     """
     try:
-        response = requests.get(tracker_url, headers=HEADERS, timeout=30)
+        # Strip any ?q= query params — they're not needed
+        clean_url = tracker_url.split('?')[0]
+        response = requests.get(clean_url, headers=HEADERS, timeout=30)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # The market price lives in the first <td> of the price table
-        # that contains a dollar amount. It looks like: "$485.00"
-        # We look for a <td> whose text matches a price pattern
-        price_pattern = re.compile(r'^\$[\d,]+\.\d{2}')
+        # Find the first dollar amount in any table cell
+        # Handles formats like "$485.00", "$813.95  $0.00", "$485.00+$10.00"
+        dollar_pattern = re.compile(r'\$(\d{1,6}(?:,\d{3})*\.\d{2})')
 
-        # First, try the id="sell-prices" table which holds the grade prices
         tables = soup.find_all("table")
         for table in tables:
             cells = table.find_all("td")
             for cell in cells:
                 text = cell.get_text(strip=True)
-                # Match a clean price cell like "$485.00" or "$485.00+$10.00"
-                if price_pattern.match(text):
-                    # Strip any trailing delta like "+$10.00" or "-$5.00"
-                    price_str = text.split('+')[0].split('-')[0]
-                    price_str = price_str.replace('$', '').replace(',', '').strip()
-                    price = float(price_str)
+                match = dollar_pattern.search(text)
+                if match:
+                    price = float(match.group(1).replace(',', ''))
                     if price > 0:
                         return price
 
