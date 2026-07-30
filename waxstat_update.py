@@ -114,16 +114,19 @@ def get_sportscards_price(tracker_url):
     Returns a float price or None if not found.
     """
     try:
-        # Strip any ?q= query params — they're not needed
         clean_url = tracker_url.split('?')[0]
         response = requests.get(clean_url, headers=HEADERS, timeout=30)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Find the first dollar amount in any table cell
-        # Handles formats like "$485.00", "$813.95  $0.00", "$485.00+$10.00"
         dollar_pattern = re.compile(r'\$(\d{1,6}(?:,\d{3})*\.\d{2})')
 
+        # Remove nav/header/footer so their $6/month links don't pollute results
+        for tag in soup.find_all(['nav', 'header', 'footer', 'ul']):
+            tag.decompose()
+
+        # The main price table is the first <table> on the page after cleanup
+        # It contains the Ungraded / Grade 7 / Grade 8 etc columns
         tables = soup.find_all("table")
         for table in tables:
             cells = table.find_all("td")
@@ -132,7 +135,8 @@ def get_sportscards_price(tracker_url):
                 match = dollar_pattern.search(text)
                 if match:
                     price = float(match.group(1).replace(',', ''))
-                    if price > 0:
+                    # Sanity check: real box prices are between $10 and $50,000
+                    if 10 < price < 50000:
                         return price
 
         print(f"  No price found in tables")
