@@ -186,6 +186,12 @@
     transition: color .15s;
   }
 
+  thead th.wrap {
+    white-space: normal;
+    min-width: 80px;
+    max-width: 100px;
+  }
+
   thead th:hover { color: var(--text); }
 
   thead th.sort-asc::after  { content: " ▲"; color: var(--accent); }
@@ -343,20 +349,20 @@ const COL = {
   EBAY_PRICE:    14,
 };
 
-// Display: [header label, tsv column index, numeric?]
+// Display: [header label, tsv column index, numeric?, wrap?]
 // null index = computed column (not from TSV)
 const COLS = [
-  ["Release Date",               COL.RELEASE_DATE,  false],
-  ["Collection Year",            COL.COLLECTION_YR, false],
-  ["Category",                   COL.CATEGORY,      false],
-  ["Product",                    COL.PRODUCT,       false],
-  ["MSRP",                       COL.MSRP,          true ],
-  ["Estimated Reseller Price",   COL.WAXSTAT,       true ],
-  ["Estimated eBay Price",       COL.EBAY_PRICE,    true ],
-  ["Gain",                       COL.GAIN,          true ],
-  ["ROI %",                      COL.ROI,           true ],
-  ["eBay Profit",                COL.EBAY_PROFIT,   true ],
-  ["eBay Links",                 null,              false],
+  ["Release Date",               COL.RELEASE_DATE,  false, false],
+  ["Collection Year",            COL.COLLECTION_YR, false, false],
+  ["Category",                   COL.CATEGORY,      false, false],
+  ["Product",                    COL.PRODUCT,       false, false],
+  ["MSRP",                       COL.MSRP,          true,  false],
+  ["Estimated Reseller Price",   COL.WAXSTAT,       true,  true ],
+  ["Estimated eBay Price",       COL.EBAY_PRICE,    true,  true ],
+  ["Gain",                       COL.GAIN,          true,  false],
+  ["ROI %",                      COL.ROI,           true,  false],
+  ["eBay Profit",                COL.EBAY_PROFIT,   true,  false],
+  ["eBay Links",                 null,              false, false],
 ];
 
 let allData = [];
@@ -550,10 +556,13 @@ function render() {
   const thead = document.getElementById('thead');
   thead.innerHTML = '';
   const tr = document.createElement('tr');
-  COLS.forEach(([label], i) => {
+  COLS.forEach(([label,,, wrap], i) => {
     const th = document.createElement('th');
     th.textContent = label;
-    if (i === sortCol) th.className = sortAsc ? 'sort-asc' : 'sort-desc';
+    const classes = [];
+    if (i === sortCol) classes.push(sortAsc ? 'sort-asc' : 'sort-desc');
+    if (wrap) classes.push('wrap');
+    if (classes.length) th.className = classes.join(' ');
     th.addEventListener('click', () => {
       if (sortCol === i) sortAsc = !sortAsc;
       else { sortCol = i; sortAsc = true; }
@@ -575,7 +584,7 @@ function render() {
         const keyword = [row[COL.PRODUCT], row[COL.BOX_TYPE]]
           .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
         if (keyword) {
-          const exclusions = '-break+-PYT+-live+-case';
+          const exclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA';
           const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}+${exclusions}&_sacat=0&_from=R40`;
           const listingsUrl = `${base}&_trksid=m570.l1313`;
           const soldUrl     = `${base}&rt=nc&LH_Sold=1`;
