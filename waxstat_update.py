@@ -122,10 +122,19 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         response = requests.get(clean_url, headers=HEADERS, timeout=30)
         response.raise_for_status()
 
-        # If we were redirected away from the requested URL, bail out
-        if response.url.rstrip('/') != clean_url.rstrip('/'):
-            print(f"  Redirected to {response.url} — skipping")
+        # Check for JS-based redirects by inspecting the page title
+        # A valid product page has a specific title; a search/landing page does not
+        soup_check = BeautifulSoup(response.text, "html.parser")
+        page_title = soup_check.title.get_text(strip=True) if soup_check.title else ''
+
+        # Landing/search pages have generic titles like "Hobby Box Card Prices"
+        # or "Search Results". A real product page title contains the product name.
+        bad_titles = ['search', 'results', 'too many results', 'card prices | hobby box card list']
+        if any(bad in page_title.lower() for bad in bad_titles):
+            print(f"  Landed on wrong page ('{page_title}') — skipping")
             return None
+
+        soup = soup_check
         soup = BeautifulSoup(response.text, "html.parser")
 
         # Parse exclusion keywords (lowercase for case-insensitive matching)
@@ -203,10 +212,11 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         # Re-parse the page fresh for the market price
         # (can't reuse soup — nav stripping may have corrupted it)
         response2 = requests.get(clean_url, headers=HEADERS, timeout=30)
-        if response2.url.rstrip('/') != clean_url.rstrip('/'):
-            print(f"  Fallback redirected to {response2.url} — skipping")
-            return None
         soup2 = BeautifulSoup(response2.text, "html.parser")
+        page_title2 = soup2.title.get_text(strip=True) if soup2.title else ''
+        if any(bad in page_title2.lower() for bad in bad_titles):
+            print(f"  Fallback landed on wrong page — skipping")
+            return None
 
         # Remove nav/header/footer/ul so $6/month links don't pollute
         for tag in soup2.find_all(['nav', 'header', 'footer', 'ul']):
