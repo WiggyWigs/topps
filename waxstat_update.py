@@ -122,19 +122,15 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         response = requests.get(clean_url, headers=HEADERS, timeout=30)
         response.raise_for_status()
 
-        # Check for JS-based redirects by inspecting the page title
-        # A valid product page has a specific title; a search/landing page does not
-        soup_check = BeautifulSoup(response.text, "html.parser")
-        page_title = soup_check.title.get_text(strip=True) if soup_check.title else ''
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        # Landing/search pages have generic titles like "Hobby Box Card Prices"
-        # or "Search Results". A real product page title contains the product name.
-        bad_titles = ['search', 'results', 'too many results', 'card prices | hobby box card list']
-        if any(bad in page_title.lower() for bad in bad_titles):
-            print(f"  Landed on wrong page ('{page_title}') — skipping")
+        # Valid product pages have a canonical URL containing '/game/'
+        # Landing/search pages redirect to /search-products or similar
+        canonical = soup.find('link', rel='canonical')
+        canonical_url = canonical['href'] if canonical else ''
+        if '/game/' not in canonical_url:
+            print(f"  Wrong page (canonical: {canonical_url}) — skipping")
             return None
-
-        soup = soup_check
         soup = BeautifulSoup(response.text, "html.parser")
 
         # Parse exclusion keywords (lowercase for case-insensitive matching)
@@ -213,8 +209,9 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         # (can't reuse soup — nav stripping may have corrupted it)
         response2 = requests.get(clean_url, headers=HEADERS, timeout=30)
         soup2 = BeautifulSoup(response2.text, "html.parser")
-        page_title2 = soup2.title.get_text(strip=True) if soup2.title else ''
-        if any(bad in page_title2.lower() for bad in bad_titles):
+        canonical2 = soup2.find('link', rel='canonical')
+        canonical_url2 = canonical2['href'] if canonical2 else ''
+        if '/game/' not in canonical_url2:
             print(f"  Fallback landed on wrong page — skipping")
             return None
 
