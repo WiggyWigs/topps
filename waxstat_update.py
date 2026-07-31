@@ -149,20 +149,30 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
                 if not date_pattern.match(date_text):
                     continue
 
-                # Third cell is the title
-                title_text = cells[2].get_text(strip=True).lower()
+                # Any cell after the first two could be title or price
+                # Search all remaining cells for a price
+                title_text = ''
+                price = None
+                for cell in cells[1:]:
+                    text = cell.get_text(strip=True)
+                    # Title cell is the longest text cell
+                    if len(text) > len(title_text) and not dollar_pattern.search(text):
+                        title_text = text.lower()
+                    match = dollar_pattern.search(text)
+                    if match and price is None:
+                        candidate = float(match.group(1).replace(',', ''))
+                        if 10 < candidate < 50000:
+                            price = candidate
+
+                if not title_text and not price:
+                    continue
 
                 # Skip if any exclusion keyword found in title
                 if any(ex in title_text for ex in excludes):
                     continue
 
-                # Fourth cell is the price — grab the first dollar amount
-                price_text = cells[3].get_text(strip=True)
-                match = dollar_pattern.search(price_text)
-                if match:
-                    price = float(match.group(1).replace(',', ''))
-                    if 10 < price < 50000:
-                        clean_prices.append(price)
+                if price is not None:
+                    clean_prices.append(price)
 
             if clean_prices:
                 break  # Stop after first table with valid sales data
@@ -185,13 +195,17 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         else:
             print(f"  No clean sales found — falling back to market price")
 
+        # Re-parse the page fresh for the market price
+        # (can't reuse soup — nav stripping may have corrupted it)
+        response2 = requests.get(clean_url, headers=HEADERS, timeout=30)
+        soup2 = BeautifulSoup(response2.text, "html.parser")
+
         # Remove nav/header/footer/ul so $6/month links don't pollute
-        for tag in soup.find_all(['nav', 'header', 'footer', 'ul']):
+        for tag in soup2.find_all(['nav', 'header', 'footer', 'ul']):
             tag.decompose()
 
-        for table in tables:
-            cells = table.find_all("td")
-            for cell in cells:
+        for table in soup2.find_all("table"):
+            for cell in table.find_all("td"):
                 text = cell.get_text(strip=True)
                 match = dollar_pattern.search(text)
                 if match:
