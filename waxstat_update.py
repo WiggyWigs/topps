@@ -121,6 +121,11 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         clean_url = tracker_url.split('?')[0]
         response = requests.get(clean_url, headers=HEADERS, timeout=30)
         response.raise_for_status()
+
+        # If we were redirected away from the requested URL, bail out
+        if response.url.rstrip('/') != clean_url.rstrip('/'):
+            print(f"  Redirected to {response.url} — skipping")
+            return None
         soup = BeautifulSoup(response.text, "html.parser")
 
         # Parse exclusion keywords (lowercase for case-insensitive matching)
@@ -198,6 +203,9 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         # Re-parse the page fresh for the market price
         # (can't reuse soup — nav stripping may have corrupted it)
         response2 = requests.get(clean_url, headers=HEADERS, timeout=30)
+        if response2.url.rstrip('/') != clean_url.rstrip('/'):
+            print(f"  Fallback redirected to {response2.url} — skipping")
+            return None
         soup2 = BeautifulSoup(response2.text, "html.parser")
 
         # Remove nav/header/footer/ul so $6/month links don't pollute
