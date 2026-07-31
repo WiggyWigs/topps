@@ -608,10 +608,21 @@ function render() {
         a.textContent = row[COL.PRODUCT] || '';
         td.appendChild(a);
       } else if (colIdx === COL.EBAY_PRICE) {
-        td.textContent = row[colIdx] || '';
+        const trackerUrl = row[COL.TRACKER_URL] || '';
+        const priceText = row[colIdx] || '';
         const releaseDate = parseDate(row[COL.RELEASE_DATE]);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        if (trackerUrl && priceText) {
+          const a = document.createElement('a');
+          a.href = trackerUrl;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = priceText;
+          td.appendChild(a);
+        } else {
+          td.textContent = priceText;
+        }
         if (releaseDate >= today) {
           const tag = document.createElement('span');
           tag.className = 'presale';
