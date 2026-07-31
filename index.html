@@ -207,6 +207,10 @@
     color: var(--text);
   }
 
+  tbody td.numeric {
+    text-align: center;
+  }
+
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
@@ -578,7 +582,7 @@ function render() {
   tbody.innerHTML = '';
   data.forEach(row => {
     const tr = document.createElement('tr');
-    COLS.forEach(([, colIdx]) => {
+    COLS.forEach(([, colIdx, isNum]) => {
       const td = document.createElement('td');
       if (colIdx === null) {
         // Computed eBay links column
@@ -645,10 +649,13 @@ function render() {
       if (colIdx === COL.ROI) {
         const hasPrices = parseNum(row[COL.MSRP]) !== 0 && parseNum(row[COL.EBAY_PRICE]) !== 0;
         if (hasPrices) {
-          td.className = roiClass(row[COL.ROI]);
+          td.className = roiClass(row[COL.ROI]) + ' numeric';
         } else {
           td.textContent = '';
+          td.className = 'numeric';
         }
+      } else if (isNum) {
+        td.classList.add('numeric');
       }
       tr.appendChild(td);
     });
