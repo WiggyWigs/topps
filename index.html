@@ -347,6 +347,7 @@ const COL = {
   EBAY_PROFIT:   12,
   TRACKER_URL:   13,
   EBAY_PRICE:    14,
+  EXCLUDE_KW:    15,
 };
 
 // Display: [header label, tsv column index, numeric?, wrap?]
@@ -584,8 +585,17 @@ function render() {
         const keyword = [row[COL.PRODUCT], row[COL.BOX_TYPE]]
           .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
         if (keyword) {
-          const exclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA';
-          const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}+${exclusions}&_sacat=0&_from=R40`;
+          const globalExclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA';
+          const rowExclusions = (row[COL.EXCLUDE_KW] || '')
+            .split(',')
+            .map(k => k.trim())
+            .filter(Boolean)
+            .map(k => `-${k}`)
+            .join('+');
+          const allExclusions = rowExclusions
+            ? `${globalExclusions}+${rowExclusions}`
+            : globalExclusions;
+          const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}+${allExclusions}&_sacat=0&_from=R40`;
           const listingsUrl = `${base}&_trksid=m570.l1313`;
           const soldUrl     = `${base}&rt=nc&LH_Sold=1`;
           const wrap = document.createElement('div');
