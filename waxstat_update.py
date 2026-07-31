@@ -51,6 +51,7 @@ COL_LAST_UPDATED  = 11  # L
 COL_EBAY_PROFIT   = 12  # M
 COL_TRACKER_URL   = 13  # N
 COL_EBAY_PRICE    = 14  # O
+COL_EXCLUDE_KW    = 15  # P
 
 # ======================================
 # CONNECT TO GOOGLE SHEET
@@ -108,10 +109,13 @@ else:
 # HELPER: SCRAPE SPORTSCARDSPRO PRICE
 # ======================================
 
-def get_sportscards_price(tracker_url):
+def get_sportscards_price(tracker_url, exclude_keywords=None):
     """
-    Scrapes the Ungraded market price from a SportsCardsPro product page.
-    Returns a float price or None if not found.
+    Scrapes sold listings from a SportsCardsPro/PriceCharting product page.
+    - Filters out listings whose titles contain any exclude_keywords
+    - Returns median of last 10 clean sales (min 5)
+    - Falls back to their market price if fewer than 5 clean sales exist
+    - Returns None if no price can be determined
     """
     try:
         clean_url = tracker_url.split('?')[0]
@@ -119,15 +123,72 @@ def get_sportscards_price(tracker_url):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
+        # Parse exclusion keywords (lowercase for case-insensitive matching)
+        excludes = []
+        if exclude_keywords:
+            excludes = [k.strip().lower() for k in exclude_keywords.split(',') if k.strip()]
+
+        # ── Scrape sold listings table ──────────────────────────────
+        # Sold listings table has columns: Sale Date | TW | Title | Price
+        # We look for rows with a date pattern and extract the price column
+        date_pattern   = re.compile(r'^\d{4}-\d{2}-\d{2}$')
         dollar_pattern = re.compile(r'\$(\d{1,6}(?:,\d{3})*\.\d{2})')
 
-        # Remove nav/header/footer so their $6/month links don't pollute results
+        clean_prices = []
+
+        tables = soup.find_all("table")
+        for table in tables:
+            rows = table.find_all("tr")
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) < 4:
+                    continue
+
+                # First cell should be a sale date
+                date_text = cells[0].get_text(strip=True)
+                if not date_pattern.match(date_text):
+                    continue
+
+                # Third cell is the title
+                title_text = cells[2].get_text(strip=True).lower()
+
+                # Skip if any exclusion keyword found in title
+                if any(ex in title_text for ex in excludes):
+                    continue
+
+                # Fourth cell is the price — grab the first dollar amount
+                price_text = cells[3].get_text(strip=True)
+                match = dollar_pattern.search(price_text)
+                if match:
+                    price = float(match.group(1).replace(',', ''))
+                    if 10 < price < 50000:
+                        clean_prices.append(price)
+
+            if clean_prices:
+                break  # Stop after first table with valid sales data
+
+        # ── Compute median ──────────────────────────────────────────
+        if len(clean_prices) >= 5:
+            sample = clean_prices[:10]  # Last 10 (most recent first)
+            sample_sorted = sorted(sample)
+            mid = len(sample_sorted) // 2
+            if len(sample_sorted) % 2 == 0:
+                median = (sample_sorted[mid - 1] + sample_sorted[mid]) / 2
+            else:
+                median = sample_sorted[mid]
+            print(f"  Median of {len(sample)} clean sales: ${median:.2f}")
+            return round(median, 2)
+
+        # ── Fallback: their market price ────────────────────────────
+        if len(clean_prices) > 0:
+            print(f"  Only {len(clean_prices)} clean sale(s) found — falling back to market price")
+        else:
+            print(f"  No clean sales found — falling back to market price")
+
+        # Remove nav/header/footer/ul so $6/month links don't pollute
         for tag in soup.find_all(['nav', 'header', 'footer', 'ul']):
             tag.decompose()
 
-        # The main price table is the first <table> on the page after cleanup
-        # It contains the Ungraded / Grade 7 / Grade 8 etc columns
-        tables = soup.find_all("table")
         for table in tables:
             cells = table.find_all("td")
             for cell in cells:
@@ -135,11 +196,11 @@ def get_sportscards_price(tracker_url):
                 match = dollar_pattern.search(text)
                 if match:
                     price = float(match.group(1).replace(',', ''))
-                    # Sanity check: real box prices are between $10 and $50,000
                     if 10 < price < 50000:
-                        return price
+                        print(f"  Market price fallback: ${price:.2f}")
+                        return round(price, 2)
 
-        print(f"  No price found in tables")
+        print(f"  No price found at all")
         return None
 
     except Exception as e:
@@ -158,14 +219,15 @@ for row_num in range(2, len(rows) + 1):
         row = rows[row_num - 1]
 
         # Pad short rows
-        while len(row) < 15:
+        while len(row) < 16:
             row.append("")
 
-        waxstat_url  = row[COL_WAXSTAT_URL].strip()
-        tracker_url  = row[COL_TRACKER_URL].strip()
-        last_updated = row[COL_LAST_UPDATED].strip()
-        product      = row[COL_PRODUCT].strip()
-        box_type     = row[COL_BOX_TYPE].strip()
+        waxstat_url    = row[COL_WAXSTAT_URL].strip()
+        tracker_url    = row[COL_TRACKER_URL].strip()
+        last_updated   = row[COL_LAST_UPDATED].strip()
+        product        = row[COL_PRODUCT].strip()
+        box_type       = row[COL_BOX_TYPE].strip()
+        exclude_kw     = row[COL_EXCLUDE_KW].strip()
 
         if not product:
             continue
@@ -233,7 +295,7 @@ for row_num in range(2, len(rows) + 1):
 
         if tracker_url:
             print(f"Row {row_num}: Scraping SportsCardsPro — {product}")
-            ebay_price = get_sportscards_price(tracker_url)
+            ebay_price = get_sportscards_price(tracker_url, exclude_kw or None)
 
             if ebay_price is not None:
                 sheet.update(
