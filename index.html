@@ -339,6 +339,8 @@ const COL = {
   URL:           10,
   LAST_UPDATED:  11,
   EBAY_PROFIT:   12,
+  TRACKER_URL:   13,
+  EBAY_PRICE:    14,
 };
 
 // Display: [header label, tsv column index, numeric?]
@@ -348,9 +350,9 @@ const COLS = [
   ["Collection Year",            COL.COLLECTION_YR, false],
   ["Category",                   COL.CATEGORY,      false],
   ["Product",                    COL.PRODUCT,       false],
-  ["Box Type",                   COL.BOX_TYPE,      false],
   ["MSRP",                       COL.MSRP,          true ],
-  ["Current Est. Sale Price",    COL.SALE_PRICE,    true ],
+  ["Estimated Reseller Price",   COL.WAXSTAT,       true ],
+  ["Estimated eBay Price",       COL.EBAY_PRICE,    true ],
   ["Gain",                       COL.GAIN,          true ],
   ["ROI %",                      COL.ROI,           true ],
   ["eBay Profit",                COL.EBAY_PROFIT,   true ],
@@ -441,7 +443,11 @@ function getFiltered() {
   return allData.filter(row => {
     if (cat && row[COL.CATEGORY]      !== cat) return false;
     if (yr  && row[COL.COLLECTION_YR] !== yr)  return false;
-    if (search && !row.join(' ').toLowerCase().includes(search)) return false;
+    if (search) {
+      const words = search.split(/\s+/).filter(Boolean);
+      const rowText = row.join(' ').toLowerCase();
+      if (!words.every(w => rowText.includes(w))) return false;
+    }
     if (presale || released) {
       const releaseDate = parseDate(row[COL.RELEASE_DATE]);
       if (presale  && releaseDate <  today) return false;
@@ -463,9 +469,9 @@ function updateCards(data) {
     return;
   }
 
-  // Only include rows with both MSRP and Sale Price in ROI calculations
+  // Only include rows with both MSRP and eBay Price in ROI calculations
   const pricedRows = data.filter(r =>
-    parseNum(r[COL.MSRP]) !== 0 && parseNum(r[COL.SALE_PRICE]) !== 0
+    parseNum(r[COL.MSRP]) !== 0 && parseNum(r[COL.EBAY_PRICE]) !== 0
   );
 
   // Average ROI — priced rows only
@@ -510,8 +516,8 @@ function render() {
 
     // For ROI column, push rows without prices to the bottom always
     if (colIdx === COL.ROI) {
-      const aHas = parseNum(a[COL.MSRP]) !== 0 && parseNum(a[COL.SALE_PRICE]) !== 0;
-      const bHas = parseNum(b[COL.MSRP]) !== 0 && parseNum(b[COL.SALE_PRICE]) !== 0;
+      const aHas = parseNum(a[COL.MSRP]) !== 0 && parseNum(a[COL.EBAY_PRICE]) !== 0;
+      const bHas = parseNum(b[COL.MSRP]) !== 0 && parseNum(b[COL.EBAY_PRICE]) !== 0;
       if (!aHas && !bHas) return 0;
       if (!aHas) return 1;
       if (!bHas) return -1;
@@ -592,7 +598,7 @@ function render() {
         a.rel = 'noopener';
         a.textContent = row[COL.PRODUCT] || '';
         td.appendChild(a);
-      } else if (colIdx === COL.SALE_PRICE) {
+      } else if (colIdx === COL.EBAY_PRICE) {
         td.textContent = row[colIdx] || '';
         const releaseDate = parseDate(row[COL.RELEASE_DATE]);
         const today = new Date();
@@ -607,7 +613,7 @@ function render() {
         td.textContent = row[colIdx] || '';
       }
       if (colIdx === COL.ROI) {
-        const hasPrices = parseNum(row[COL.MSRP]) !== 0 && parseNum(row[COL.SALE_PRICE]) !== 0;
+        const hasPrices = parseNum(row[COL.MSRP]) !== 0 && parseNum(row[COL.EBAY_PRICE]) !== 0;
         if (hasPrices) {
           td.className = roiClass(row[COL.ROI]);
         } else {
