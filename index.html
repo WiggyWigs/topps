@@ -170,7 +170,7 @@
 
   thead th {
     position: sticky;
-    top: 0;
+    top: var(--topbar-height, 140px);
     background: var(--surface2);
     border-bottom: 1px solid var(--border);
     padding: 10px 12px;
@@ -184,6 +184,7 @@
     text-transform: uppercase;
     letter-spacing: .5px;
     transition: color .15s;
+    z-index: 10;
   }
 
   thead th.wrap {
@@ -696,6 +697,14 @@ document.getElementById('filterReleased').addEventListener('change', function() 
 });
 
 loadData();
+
+// Set sticky header offset to match topbar height
+function setTopbarHeight() {
+  const h = document.getElementById('topbar').offsetHeight;
+  document.documentElement.style.setProperty('--topbar-height', h + 'px');
+}
+setTopbarHeight();
+window.addEventListener('resize', setTopbarHeight);
 </script>
 
 <footer style="padding: 16px 20px 28px; color: var(--muted); font-size: 12px;">
