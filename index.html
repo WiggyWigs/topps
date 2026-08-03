@@ -158,6 +158,8 @@
 
   .table-wrap {
     overflow-x: auto;
+    overflow-y: auto;
+    height: calc(100vh - var(--topbar-height, 160px) - 80px);
     border: 1px solid var(--border);
     border-radius: var(--radius);
   }
@@ -170,7 +172,7 @@
 
   thead th {
     position: sticky;
-    top: var(--topbar-height, 140px);
+    top: 0;
     background: var(--surface2);
     border-bottom: 1px solid var(--border);
     padding: 10px 12px;
@@ -696,7 +698,7 @@ document.getElementById('filterReleased').addEventListener('change', function() 
   render();
 });
 
-loadData();
+loadData().then(() => setTopbarHeight());
 
 // Set sticky header offset to match topbar height
 function setTopbarHeight() {
