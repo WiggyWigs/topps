@@ -463,9 +463,12 @@ function getFiltered() {
       if (!words.every(w => rowText.includes(w))) return false;
     }
     if (presale || released) {
-      const releaseDate = parseDate(row[COL.RELEASE_DATE]);
-      if (presale  && releaseDate <  today) return false;
-      if (released && releaseDate >= today) return false;
+      const releaseDateRaw = row[COL.RELEASE_DATE] ? row[COL.RELEASE_DATE].trim() : '';
+      const releaseDate = parseDate(releaseDateRaw);
+      const hasReleaseDate = releaseDateRaw !== '';
+      const isPresale = !hasReleaseDate || releaseDate >= today;
+      if (presale  && !isPresale) return false;
+      if (released &&  isPresale) return false;
     }
     return true;
   });
@@ -627,9 +630,11 @@ function render() {
       } else if (colIdx === COL.EBAY_PRICE) {
         const trackerUrl = row[COL.TRACKER_URL] || '';
         const priceText = row[colIdx] || '';
-        const releaseDate = parseDate(row[COL.RELEASE_DATE]);
+        const releaseDateRaw = (row[COL.RELEASE_DATE] || '').trim();
+        const releaseDate = parseDate(releaseDateRaw);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        const isPresale = !releaseDateRaw || releaseDate >= today;
         if (trackerUrl && priceText) {
           const a = document.createElement('a');
           a.href = trackerUrl;
@@ -640,7 +645,21 @@ function render() {
         } else {
           td.textContent = priceText;
         }
-        if (releaseDate >= today) {
+        // Flag 40%+ divergence between Reseller and eBay price
+        const resellerPrice = parseNum(row[COL.WAXSTAT]);
+        const ebayPrice     = parseNum(row[colIdx]);
+        if (resellerPrice > 0 && ebayPrice > 0) {
+          const diff = Math.abs(ebayPrice - resellerPrice) / resellerPrice;
+          if (diff >= 0.40) {
+            const pct = (diff * 100).toFixed(0);
+            const warn = document.createElement('span');
+            warn.textContent = ' ⚠️';
+            warn.title = `${pct}% difference vs Estimated Reseller Price — verify data`;
+            warn.style.cursor = 'help';
+            td.appendChild(warn);
+          }
+        }
+        if (isPresale) {
           const tag = document.createElement('span');
           tag.className = 'presale';
           tag.textContent = '(pre-sale)';
@@ -699,6 +718,9 @@ document.getElementById('filterReleased').addEventListener('change', function() 
 });
 
 loadData().then(() => setTopbarHeight());
+
+// Default state — released only checked
+document.getElementById('filterReleased').checked = true;
 
 // Set sticky header offset to match topbar height
 function setTopbarHeight() {
