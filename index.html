@@ -592,19 +592,41 @@ function render() {
       const td = document.createElement('td');
       if (colIdx === null) {
         // Computed eBay links column
-        const keyword = [row[COL.PRODUCT], row[COL.BOX_TYPE]]
+        const boxType = (row[COL.BOX_TYPE] || '').trim();
+        // Strip parenthetical from product name if it matches the box type
+        // e.g. "2026 Topps Flagship Football (Mega)" + boxType "Mega" → "2026 Topps Flagship Football"
+        let productName = (row[COL.PRODUCT] || '').trim();
+        if (boxType) {
+          const parenPattern = new RegExp(`\\s*\\(${boxType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\s*`, 'i');
+          productName = productName.replace(parenPattern, '').trim();
+        }
+        const keyword = [productName, boxType]
           .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
         if (keyword) {
           const globalExclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA';
-          const rowExclusions = (row[COL.EXCLUDE_KW] || '')
+
+          // Parse column P — split into keyword exclusions and seller exclusions
+          const rowTerms = (row[COL.EXCLUDE_KW] || '')
             .split(',')
             .map(k => k.trim())
-            .filter(Boolean)
+            .filter(Boolean);
+
+          const keywordExclusions = rowTerms
+            .filter(k => !k.toLowerCase().startsWith('seller:'))
             .map(k => `-${k}`)
             .join('+');
-          const allExclusions = rowExclusions
-            ? `${globalExclusions}+${rowExclusions}`
-            : globalExclusions;
+
+          const sellerExclusions = rowTerms
+            .filter(k => k.toLowerCase().startsWith('seller:'))
+            .map(k => `-${k}`)
+            .join('+');
+
+          const allExclusions = [
+            globalExclusions,
+            keywordExclusions,
+            sellerExclusions
+          ].filter(Boolean).join('+');
+
           const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}+${allExclusions}&_sacat=0&_from=R40`;
           const listingsUrl = `${base}&_trksid=m570.l1313`;
           const soldUrl     = `${base}&rt=nc&LH_Sold=1`;
