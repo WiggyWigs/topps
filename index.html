@@ -593,14 +593,32 @@ function render() {
       if (colIdx === null) {
         // Computed eBay links column
         const boxType = (row[COL.BOX_TYPE] || '').trim();
-        // Strip parenthetical from product name if it matches the box type
-        // e.g. "2026 Topps Flagship Football (Mega)" + boxType "Mega" → "2026 Topps Flagship Football"
         let productName = (row[COL.PRODUCT] || '').trim();
-        if (boxType) {
-          const parenPattern = new RegExp(`\\s*\\(${boxType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\s*`, 'i');
-          productName = productName.replace(parenPattern, '').trim();
+
+        // Check for parenthetical in product name e.g. "(Value/Blaster)" or "(Mega)"
+        const parenMatch = productName.match(/\(([^)]+)\)/);
+        let boxTypeKeyword = boxType;
+
+        if (parenMatch) {
+          const parenContent = parenMatch[1]; // e.g. "Value/Blaster" or "Mega"
+          const parenTerms = parenContent.split('/').map(t => t.trim()).filter(Boolean);
+
+          // Check if box type matches any term in the parenthetical (case-insensitive)
+          const matchesBoxType = parenTerms.some(t => t.toLowerCase() === boxType.toLowerCase());
+
+          if (matchesBoxType) {
+            // Strip the parenthetical from product name
+            productName = productName.replace(/\s*\([^)]+\)\s*/, '').trim();
+
+            if (parenTerms.length > 1) {
+              // Multiple terms — use eBay OR syntax: (value,blaster)
+              boxTypeKeyword = `(${parenTerms.map(t => t.toLowerCase()).join(',')})`;
+            }
+            // Single term — just use boxType as-is (already set above)
+          }
         }
-        const keyword = [productName, boxType]
+
+        const keyword = [productName, boxTypeKeyword]
           .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
         if (keyword) {
           const globalExclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA';
@@ -618,7 +636,7 @@ function render() {
 
           const sellerExclusions = rowTerms
             .filter(k => k.toLowerCase().startsWith('seller:'))
-            .map(k => `-${k}`)
+            .map(k => `-${k.replace(/seller:\s*/i, 'seller:')}`)
             .join('+');
 
           const allExclusions = [
