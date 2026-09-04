@@ -373,61 +373,6 @@ const COLS = [
   ["eBay Links",                 null,              false, false],
 ];
 
-// Team names that show up in "team break" listing titles — auto-excluded
-// per category so you don't have to add them to column P on every row.
-// Match must be exact against your Category column value (case-sensitive).
-const TEAM_EXCLUSIONS = {
-  // Shortest term per team (city name where it beats the nickname), with
-  // shared-city teams consolidated into one token. One exception: Packers
-  // keeps its nickname even though "Green" is shorter, because "Green"
-  // collides with card-parallel naming (Green Refractor, Green Prizm, etc).
-  Football: [
-    'Angeles',   // Chargers + Rams (shared city) — 2 teams for 1 token, kept first
-    'York',      // Giants + Jets (shared city) — 2 teams for 1 token, kept first
-    'Arizona',   // Cardinals
-    'Falcons', 'Ravens', 'Bills', 'Panthers', 'Bears', 'Bengals', 'Browns',
-    'Dallas',    // Cowboys
-    'Denver',    // Broncos
-    'Lions',
-    'Packers',   // exception — see note above
-    'Texans', 'Colts', 'Jaguars', 'Chiefs',
-    'Vegas',     // Raiders
-    'Miami',     // Dolphins
-    'Vikings',
-    'England',   // Patriots
-    'Saints',
-    'Eagles', 'Steelers',
-    'San',       // 49ers
-    'Seattle',   // Seahawks
-    'Tampa',     // Buccaneers
-    'Titans', 'Commanders'
-  ],
-  // Basketball: [...],  // add later, same pattern
-  // Baseball: [...],
-};
-
-// eBay's search string silently drops terms past a certain length — observed
-// cutoff was ~292 chars into _nkw. Keep some margin below that.
-const MAX_NKW_LEN = 270;
-
-// Fills as many team-name exclusions as fit in the remaining character budget.
-// Never touches priority exclusions (global/row/seller) — those are computed
-// first and passed in as `usedLen` so team names only eat what's left over.
-function getCategoryExclusions(category, usedLen) {
-  const list = TEAM_EXCLUSIONS[(category || '').trim()];
-  if (!list) return '';
-  let out = '';
-  let budget = MAX_NKW_LEN - usedLen;
-  for (const team of list) {
-    const token = `-${team}`;
-    const addLen = token.length + (out ? 1 : 0); // +1 for the joining '+'
-    if (addLen > budget) break;
-    out += (out ? '+' : '') + token;
-    budget -= addLen;
-  }
-  return out;
-}
-
 let allData = [];
 let sortCol = 0;     // index into COLS
 let sortAsc = false; // default: Release Date descending
@@ -677,11 +622,9 @@ function render() {
           .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
         if (keyword) {
           // "-word" exclusions plus "-\"N Box\"" phrase exclusions for common
-          // break/lot sizes — these work across every category, not just
-          // Football, since they catch the quantity pattern itself rather
-          // than a team name. Real, if lower-odds, false-positive risk: a
-          // single-box listing whose title advertises "2 Box Toppers" would
-          // also get excluded by -"2 Box". Watch for that if results look thin.
+          // break/lot sizes — catches team-break listings by lot size across
+          // every category. Team-name matching was tried and dropped: this
+          // alone ruled out the team-break listings that prompted the fix.
           const globalExclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA'
             + '+-%222+Box%22+-%223+Box%22+-%224+Box%22+-%225+Box%22+-%226+Box%22';
 
@@ -701,22 +644,10 @@ function render() {
             .map(k => `-${k.replace(/seller:\s*/i, 'seller:')}`)
             .join('+');
 
-          // Priority exclusions always survive in full — global rules plus
-          // anything you deliberately typed into column P for this product.
-          const priorityExclusions = [
+          const allExclusions = [
             globalExclusions,
             keywordExclusions,
             sellerExclusions
-          ].filter(Boolean).join('+');
-
-          // Team names fill whatever character budget is left over — the
-          // part of the string that's allowed to get truncated.
-          const usedLen = keyword.length + 1 + priorityExclusions.length; // +1 = '+' joining keyword to exclusions
-          const categoryExclusions = getCategoryExclusions(row[COL.CATEGORY], usedLen);
-
-          const allExclusions = [
-            priorityExclusions,
-            categoryExclusions
           ].filter(Boolean).join('+');
 
           const base = `https://www.ebay.com/sch/i.html?_nkw=${keyword}+${allExclusions}&_sacat=0&_from=R40`;
