@@ -676,7 +676,14 @@ function render() {
         const keyword = [productName, boxTypeKeyword]
           .filter(Boolean).join(' ').trim().replace(/\s+/g, '+');
         if (keyword) {
-          const globalExclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA';
+          // "-word" exclusions plus "-\"N Box\"" phrase exclusions for common
+          // break/lot sizes — these work across every category, not just
+          // Football, since they catch the quantity pattern itself rather
+          // than a team name. Real, if lower-odds, false-positive risk: a
+          // single-box listing whose title advertises "2 Box Toppers" would
+          // also get excluded by -"2 Box". Watch for that if results look thin.
+          const globalExclusions = '-break+-PYT+-live+-case+-BR+-BRE+-BREA'
+            + '+-%222+Box%22+-%223+Box%22+-%224+Box%22+-%225+Box%22+-%226+Box%22';
 
           // Parse column P — split into keyword exclusions and seller exclusions
           const rowTerms = (row[COL.EXCLUDE_KW] || '')
