@@ -32,6 +32,13 @@ HEADERS = {
 # False = refresh everything
 SKIP_UPDATED_TODAY = True
 
+# Sanity check threshold — must match the dashboard's ⚠️ divergence flag
+DIVERGENCE_THRESHOLD = 0.40
+
+# Sentinel returned by get_sportscards_price when the page loaded correctly
+# but genuinely shows no price (vs. None = scrape failed / wrong page)
+NO_PRICE_ON_PAGE = "NO_PRICE_ON_PAGE"
+
 # ======================================
 # COLUMN INDICES (0-based)
 # ======================================
@@ -106,6 +113,17 @@ else:
     print("Not a snapshot day — skipping price history")
 
 # ======================================
+# HELPER: PARSE A SHEET CELL AS A NUMBER
+# ======================================
+
+def parse_num(value):
+    """Converts a sheet cell like '$1,234.56' to a float. Returns 0.0 if blank/invalid."""
+    try:
+        return float(str(value).replace("$", "").replace(",", "").strip())
+    except (ValueError, TypeError):
+        return 0.0
+
+# ======================================
 # HELPER: SCRAPE SPORTSCARDSPRO PRICE
 # ======================================
 
@@ -115,7 +133,8 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
     - Filters out listings whose titles contain any exclude_keywords
     - Returns median of last 10 clean sales (min 5)
     - Falls back to their market price if fewer than 5 clean sales exist
-    - Returns None if no price can be determined
+    - Returns NO_PRICE_ON_PAGE if the correct page loaded but shows no price
+    - Returns None if the scrape failed (error, wrong page, redirect)
     """
     try:
         clean_url = tracker_url.split('?')[0]
@@ -208,6 +227,7 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
         # Re-parse the page fresh for the market price
         # (can't reuse soup — nav stripping may have corrupted it)
         response2 = requests.get(clean_url, headers=HEADERS, timeout=30)
+        response2.raise_for_status()
         soup2 = BeautifulSoup(response2.text, "html.parser")
         canonical2 = soup2.find('link', rel='canonical')
         canonical_url2 = canonical2['href'] if canonical2 else ''
@@ -229,8 +249,9 @@ def get_sportscards_price(tracker_url, exclude_keywords=None):
                         print(f"  Market price fallback: ${price:.2f}")
                         return round(price, 2)
 
+        # Correct page loaded, but it has no sales and no market price
         print(f"  No price found at all")
-        return None
+        return NO_PRICE_ON_PAGE
 
     except Exception as e:
         print(f"  SportsCardsPro scrape error: {e}")
@@ -270,6 +291,10 @@ for row_num in range(2, len(rows) + 1):
         updated_something = False
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+        # Reseller price used for the sanity check — starts as the stored
+        # column G value, replaced below if WaxStat returns a fresh price
+        reseller_price = parse_num(row[COL_WAXSTAT_AVG])
+
         # ======================================
         # WAXSTAT SCRAPE
         # ======================================
@@ -302,6 +327,7 @@ for row_num in range(2, len(rows) + 1):
                     )
                     print(f"  WaxStat updated | Avg=${avg_price:.2f}")
                     updated_something = True
+                    reseller_price = avg_price
 
                     # Queue history snapshot
                     if is_snapshot_day:
@@ -326,15 +352,34 @@ for row_num in range(2, len(rows) + 1):
             print(f"Row {row_num}: Scraping SportsCardsPro — {product}")
             ebay_price = get_sportscards_price(tracker_url, exclude_kw or None)
 
-            if ebay_price is not None:
+            if ebay_price == NO_PRICE_ON_PAGE:
+                # Page shows no price — check the stored value against
+                # the same 40% sanity check the dashboard uses
+                stored_ebay = parse_num(row[COL_EBAY_PRICE])
+
+                if stored_ebay > 0 and reseller_price > 0:
+                    diff = abs(stored_ebay - reseller_price) / reseller_price
+                    if diff >= DIVERGENCE_THRESHOLD:
+                        sheet.update(f"O{row_num}", [[0]])
+                        print(f"  Stored eBay price ${stored_ebay:.2f} is {diff*100:.0f}% off "
+                              f"reseller ${reseller_price:.2f} — set to 0")
+                        updated_something = True
+                    else:
+                        print(f"  Stored eBay price ${stored_ebay:.2f} within {diff*100:.0f}% "
+                              f"of reseller — kept")
+                else:
+                    print(f"  No stored eBay price or no reseller price to compare — left as is")
+
+            elif ebay_price is not None:
                 sheet.update(
                     f"O{row_num}",
                     [[ebay_price]]
                 )
                 print(f"  SportsCardsPro updated | Price=${ebay_price:.2f}")
                 updated_something = True
+
             else:
-                print(f"  SportsCardsPro: price not found")
+                print(f"  SportsCardsPro: scrape failed — stored value left as is")
 
             time.sleep(1)
 
