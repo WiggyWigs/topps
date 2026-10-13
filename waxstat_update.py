@@ -40,6 +40,9 @@ DIVERGENCE_THRESHOLD = 0.40
 # but genuinely shows no price (vs. None = scrape failed / wrong page)
 NO_PRICE_ON_PAGE = "NO_PRICE_ON_PAGE"
 
+# Written to column Q when WaxStat shows N/A and column G holds a previous price
+STALE_FLAG = "STALE"
+
 # Fail the run if at least this share of WaxStat pages have no price label
 LAYOUT_MISS_THRESHOLD = 0.50
 
@@ -63,6 +66,7 @@ COL_EBAY_PROFIT   = 12  # M
 COL_TRACKER_URL   = 13  # N
 COL_EBAY_PRICE    = 14  # O
 COL_EXCLUDE_KW    = 15  # P
+COL_WAXSTAT_FLAG  = 16  # Q — "STALE" when G is a previous price (WaxStat showed N/A)
 
 # ======================================
 # CONNECT TO GOOGLE SHEET
@@ -85,6 +89,10 @@ sheet  = wb.sheet1
 rows   = sheet.get_all_values()
 
 print(f"Found {len(rows)-1} data rows")
+
+# Label the stale-price flag column the first time it's used
+if rows and (len(rows[0]) <= COL_WAXSTAT_FLAG or not rows[0][COL_WAXSTAT_FLAG].strip()):
+    sheet.update(range_name="Q1", values=[["WaxStat Status"]])
 
 # ======================================
 # PRICE HISTORY SETUP
@@ -336,7 +344,7 @@ for row_num in range(2, len(rows) + 1):
         row = rows[row_num - 1]
 
         # Pad short rows
-        while len(row) < 16:
+        while len(row) < 17:
             row.append("")
 
         waxstat_url    = row[COL_WAXSTAT_URL].strip()
@@ -380,13 +388,20 @@ for row_num in range(2, len(rows) + 1):
                     waxstat_layout_misses += 1
                     print(f"  WaxStat: average price label not found — page layout may have changed")
                 elif avg_price == NO_PRICE_ON_PAGE:
-                    print(f"  WaxStat: page shows no average price (N/A)")
+                    if parse_num(row[COL_WAXSTAT_AVG]) > 0:
+                        if row[COL_WAXSTAT_FLAG].strip() != STALE_FLAG:
+                            sheet.update(range_name=f"Q{row_num}", values=[[STALE_FLAG]])
+                        print(f"  WaxStat: page shows N/A — keeping previous price, flagged stale")
+                    else:
+                        print(f"  WaxStat: page shows no average price (N/A)")
                 else:
                     ninety_value = round(avg_price * 0.90, 2)
                     sheet.update(
-                        f"G{row_num}:H{row_num}",
-                        [[avg_price, ninety_value]]
+                        range_name=f"G{row_num}:H{row_num}",
+                        values=[[avg_price, ninety_value]]
                     )
+                    if row[COL_WAXSTAT_FLAG].strip():
+                        sheet.update(range_name=f"Q{row_num}", values=[[""]])
                     print(f"  WaxStat updated | Avg=${avg_price:.2f}")
                     updated_something = True
                     reseller_price = avg_price
@@ -420,7 +435,7 @@ for row_num in range(2, len(rows) + 1):
                 if stored_ebay > 0 and reseller_price > 0:
                     diff = abs(stored_ebay - reseller_price) / reseller_price
                     if diff >= DIVERGENCE_THRESHOLD:
-                        sheet.update(f"O{row_num}", [[0]])
+                        sheet.update(range_name=f"O{row_num}", values=[[0]])
                         print(f"  Stored eBay price ${stored_ebay:.2f} is {diff*100:.0f}% off "
                               f"reseller ${reseller_price:.2f} — set to 0")
                         updated_something = True
@@ -432,8 +447,8 @@ for row_num in range(2, len(rows) + 1):
 
             elif ebay_price is not None:
                 sheet.update(
-                    f"O{row_num}",
-                    [[ebay_price]]
+                    range_name=f"O{row_num}",
+                    values=[[ebay_price]]
                 )
                 print(f"  SportsCardsPro updated | Price=${ebay_price:.2f}")
                 updated_something = True
@@ -448,7 +463,7 @@ for row_num in range(2, len(rows) + 1):
         # ======================================
 
         if updated_something:
-            sheet.update(f"L{row_num}", [[now_str]])
+            sheet.update(range_name=f"L{row_num}", values=[[now_str]])
 
     except Exception as e:
         print(f"Row {row_num} failed: {e}")

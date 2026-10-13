@@ -357,6 +357,7 @@ const COL = {
   TRACKER_URL:   13,
   EBAY_PRICE:    14,
   EXCLUDE_KW:    15,
+  WAXSTAT_FLAG:  16,  // "STALE" = previous price, WaxStat currently shows N/A
 };
 
 // Display: [header label, tsv column index, numeric?, wrap?]
@@ -707,6 +708,16 @@ function render() {
           tag.textContent = '(pre-sale)';
           td.appendChild(tag);
         }
+      } else if (colIdx === COL.WAXSTAT) {
+        td.textContent = row[colIdx] || '';
+        const isStale = (row[COL.WAXSTAT_FLAG] || '').trim() === 'STALE';
+        if (isStale && td.textContent) {
+          const mark = document.createElement('span');
+          mark.textContent = '**';
+          mark.title = 'Previous price, no current retailer prices found';
+          mark.style.cursor = 'help';
+          td.appendChild(mark);
+        }
       } else {
         td.textContent = row[colIdx] || '';
       }
@@ -775,6 +786,7 @@ window.addEventListener('resize', setTopbarHeight);
 
 <footer style="padding: 16px 20px 28px; color: var(--muted); font-size: 12px;">
   *eBay profit includes a 16% fee taken out of the estimated sale price<br><br>
+  **Previous price, no current retailer prices found<br><br>
   ESTIMATED SALES PRICE IS BASED OFF OF AVERAGE DEALER PRICING AND NOT REFLECTIVE OF MOST RECENT SALES (COMING SOON)
 </footer>
 
